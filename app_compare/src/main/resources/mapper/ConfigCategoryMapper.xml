@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.config.compare.mapper.ConfigCategoryMapper">
+
+    <!-- 基础表名：config_category -->
+
+    <!-- 根据父分类ID查询子分类列表 -->
+    <select id="selectByParentId" resultType="com.config.compare.entity.ConfigCategory">
+        SELECT id,
+               category_name,
+               category_code,
+               parent_id,
+               status,
+               sort_order,
+               description,
+               create_time,
+               update_time,
+               create_by,
+               update_by
+        FROM config_category
+        WHERE parent_id = #{parentId}
+        ORDER BY sort_order ASC, category_name ASC
+    </select>
+
+    <!-- 查询所有启用的配置分类（用于构建树） -->
+    <select id="selectEnabledCategories" resultType="com.config.compare.entity.ConfigCategory">
+        SELECT id,
+               category_name,
+               category_code,
+               parent_id,
+               status,
+               sort_order,
+               description,
+               create_time,
+               update_time,
+               create_by,
+               update_by
+        FROM config_category
+        WHERE status = 1
+        ORDER BY sort_order ASC, category_name ASC
+    </select>
+
+    <!-- 根据服务器类型ID查询适用的配置分类列表
+         说明：当前库未见明确的关联表定义，这里先按照“启用分类全部可选”的策略返回，
+              如后续有类型与分类的映射表（例如 config_category_server_type_map），
+              可以将此SQL替换为Join查询。
+    -->
+    <select id="selectByServerTypeId" parameterType="long" resultType="com.config.compare.entity.ConfigCategory">
+        SELECT id,
+               category_name,
+               category_code,
+               parent_id,
+               status,
+               sort_order,
+               description,
+               create_time,
+               update_time,
+               create_by,
+               update_by
+        FROM config_category
+        WHERE status = 1
+        ORDER BY sort_order ASC, category_name ASC
+    </select>
+
+</mapper>
+
+
