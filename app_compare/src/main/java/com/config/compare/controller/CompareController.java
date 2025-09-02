@@ -2,10 +2,24 @@ package com.config.compare.controller;
 
 import com.config.compare.common.result.Result;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.config.compare.entity.CompareTask;
 import com.config.compare.entity.CompareExecution;
+import com.config.compare.entity.CompareResult;
 import com.config.compare.entity.CompareRule;
+import com.config.compare.entity.ServerInstance;
 import com.config.compare.service.CompareTaskService;
+import com.config.compare.service.CompareResultService;
+import com.config.compare.service.ServerInstanceService;
+import com.config.compare.service.CompareDiffDetailService;
+import com.config.compare.entity.CompareDiffDetail;
+import com.config.compare.service.ConfigBaselineService;
+import com.config.compare.entity.ConfigBaseline;
+import com.config.compare.service.CollectResultEntityService;
+import com.config.compare.entity.CollectResultEntity;
+import com.config.compare.service.SystemInfoService;
+import com.config.compare.entity.SystemInfo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,8 +29,11 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 比对管理Controller（简化版本）
@@ -34,6 +51,12 @@ import java.util.Map;
 public class CompareController {
 
     private final CompareTaskService compareTaskService;
+    private final CompareResultService compareResultService;
+    private final ServerInstanceService serverInstanceService;
+    private final CompareDiffDetailService compareDiffDetailService;
+    private final ConfigBaselineService configBaselineService;
+    private final CollectResultEntityService collectResultEntityService;
+    private final SystemInfoService systemInfoService;
 
     // ==================== 比对任务相关接口 ====================
     
@@ -192,10 +215,108 @@ public class CompareController {
     @GetMapping("/results")
     public Result<Object> getResultList(
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "10") Integer size) {
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String taskName,
+            @RequestParam(required = false) Long systemId,
+            @RequestParam(required = false) Long taskId,
+            @RequestParam(required = false) Integer compareStatus,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
         try {
-            // TODO: 实现比对结果列表查询，需要CompareResultService
-            return Result.success("查询成功", Map.of("records", List.of(), "total", 0));
+            IPage<CompareResult> page = new Page<>(current, size);
+            
+            LambdaQueryWrapper<CompareResult> queryWrapper = new LambdaQueryWrapper<>();
+            
+            // 添加查询条件
+            if (taskId != null) {
+                queryWrapper.eq(CompareResult::getTaskId, taskId);
+            }
+            
+            if (compareStatus != null) {
+                queryWrapper.eq(CompareResult::getCompareStatus, compareStatus);
+            }
+            
+            if (startTime != null && !startTime.trim().isEmpty()) {
+                queryWrapper.ge(CompareResult::getExecuteTime, LocalDateTime.parse(startTime));
+            }
+            
+            if (endTime != null && !endTime.trim().isEmpty()) {
+                queryWrapper.le(CompareResult::getExecuteTime, LocalDateTime.parse(endTime));
+            }
+            
+            // 按执行时间倒序排列
+            queryWrapper.orderByDesc(CompareResult::getExecuteTime);
+            
+            IPage<CompareResult> resultPage = compareResultService.page(page, queryWrapper);
+            
+            // 转换为前端需要的格式
+            List<Map<String, Object>> records = resultPage.getRecords().stream()
+                .map(result -> {
+                    Map<String, Object> record = new HashMap<>();
+                    record.put("id", result.getId());
+                    record.put("taskId", result.getTaskId());
+                    record.put("executeId", result.getExecuteId());
+                    record.put("baselineId", result.getBaselineId());
+                    record.put("serverInstanceId", result.getServerInstanceId());
+                    record.put("collectResultId", result.getCollectResultId());
+                    record.put("compareStatus", result.getCompareStatus());
+                    record.put("consistencyScore", result.getConsistencyScore());
+                    record.put("highDiffCount", result.getHighDiffCount());
+                    record.put("mediumDiffCount", result.getMediumDiffCount());
+                    record.put("lowDiffCount", result.getLowDiffCount());
+                    record.put("diffSummary", result.getDiffSummary());
+                    record.put("executeTime", result.getExecuteTime());
+                    record.put("durationMs", result.getDurationMs());
+                    record.put("createTime", result.getCreateTime());
+                    record.put("updateTime", result.getUpdateTime());
+                    record.put("errorMessage", result.getErrorMessage());
+                    
+                    // 获取关联的任务信息
+                    try {
+                        CompareTask task = compareTaskService.getById(result.getTaskId());
+                        if (task != null) {
+                            record.put("taskName", task.getTaskName());
+                            record.put("systemId", task.getSystemId());
+                        }
+                    } catch (Exception e) {
+                        log.warn("获取任务信息失败: taskId={}", result.getTaskId(), e);
+                        record.put("taskName", "未知任务");
+                    }
+                    
+                    // 获取关联的服务器信息
+                    try {
+                        ServerInstance server = serverInstanceService.getById(result.getServerInstanceId());
+                        if (server != null) {
+                            String systemName = "未知系统";
+                            if (server.getSystemId() != null) {
+                                SystemInfo systemInfo = systemInfoService.getById(server.getSystemId());
+                                if (systemInfo != null) {
+                                    systemName = systemInfo.getSystemName();
+                                }
+                            }
+                            record.put("systemName", systemName);
+                            record.put("serverInstance", Map.of(
+                                "hostname", server.getInstanceName(),
+                                "serverIp", server.getServerIp()
+                            ));
+                        }
+                    } catch (Exception e) {
+                        log.warn("获取服务器信息失败: serverId={}", result.getServerInstanceId(), e);
+                        record.put("systemName", "未知系统");
+                        record.put("serverInstance", Map.of("hostname", "未知服务器"));
+                    }
+                    
+                    return record;
+                })
+                .collect(Collectors.toList());
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", records);
+            result.put("total", resultPage.getTotal());
+            result.put("current", resultPage.getCurrent());
+            result.put("size", resultPage.getSize());
+            
+            return Result.success("查询成功", result);
         } catch (Exception e) {
             log.error("获取比对结果列表失败", e);
             return Result.error("查询失败：" + e.getMessage());
@@ -248,8 +369,49 @@ public class CompareController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size) {
         try {
-            // TODO: 实现获取差异详情，需要CompareResultService
-            return Result.success("查询成功", Map.of("records", List.of(), "total", 0));
+            // 验证比对结果是否存在
+            CompareResult compareResult = compareResultService.getById(resultId);
+            if (compareResult == null) {
+                return Result.error("比对结果不存在");
+            }
+            
+            // 分页查询差异详情
+            Page<CompareDiffDetail> page = new Page<>(current, size);
+            IPage<CompareDiffDetail> diffPage = compareDiffDetailService.getDiffDetailsByResultId(resultId, page);
+            
+            // 获取基线内容
+            String baselineContent = "";
+            try {
+                ConfigBaseline baseline = configBaselineService.getById(compareResult.getBaselineId());
+                if (baseline != null) {
+                    baselineContent = baseline.getConfigContent();
+                }
+            } catch (Exception e) {
+                log.warn("获取基线内容失败: baselineId={}", compareResult.getBaselineId(), e);
+            }
+            
+            // 获取当前内容
+            String currentContent = "";
+            try {
+                if (compareResult.getCollectResultId() != null && compareResult.getCollectResultId() > 0) {
+                    CollectResultEntity collectResult = collectResultEntityService.getById(compareResult.getCollectResultId());
+                    if (collectResult != null) {
+                        currentContent = collectResult.getCollectContent();
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("获取当前内容失败: collectResultId={}", compareResult.getCollectResultId(), e);
+            }
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", diffPage.getRecords());
+            result.put("total", diffPage.getTotal());
+            result.put("current", diffPage.getCurrent());
+            result.put("size", diffPage.getSize());
+            result.put("baselineContent", baselineContent);
+            result.put("currentContent", currentContent);
+            
+            return Result.success("查询成功", result);
         } catch (Exception e) {
             log.error("获取差异详情失败", e);
             return Result.error("查询失败：" + e.getMessage());
@@ -273,16 +435,81 @@ public class CompareController {
     @GetMapping("/results/statistics")
     public Result<Object> getResultStatistics(
             @RequestParam(required = false) Long systemId,
+            @RequestParam(required = false) Long taskId,
             @RequestParam(required = false) String startTime,
             @RequestParam(required = false) String endTime) {
         try {
-            // TODO: 实现获取结果统计，需要CompareResultService
-            Map<String, Object> result = Map.of(
-                "totalResults", 100,
-                "consistentResults", 85,
-                "inconsistentResults", 15,
-                "consistencyRate", 85.0
-            );
+            LambdaQueryWrapper<CompareResult> queryWrapper = new LambdaQueryWrapper<>();
+            
+            // 添加taskId条件
+            if (taskId != null) {
+                queryWrapper.eq(CompareResult::getTaskId, taskId);
+            }
+            
+            // 添加时间范围条件
+            if (startTime != null && !startTime.trim().isEmpty()) {
+                queryWrapper.ge(CompareResult::getExecuteTime, LocalDateTime.parse(startTime));
+            }
+            
+            if (endTime != null && !endTime.trim().isEmpty()) {
+                queryWrapper.le(CompareResult::getExecuteTime, LocalDateTime.parse(endTime));
+            }
+            
+            // 统计总数
+            long totalResults = compareResultService.count(queryWrapper);
+            
+            // 统计一致的结果
+            LambdaQueryWrapper<CompareResult> consistentWrapper = new LambdaQueryWrapper<>();
+            consistentWrapper.eq(CompareResult::getCompareStatus, 1);
+            if (taskId != null) {
+                consistentWrapper.eq(CompareResult::getTaskId, taskId);
+            }
+            if (startTime != null && !startTime.trim().isEmpty()) {
+                consistentWrapper.ge(CompareResult::getExecuteTime, LocalDateTime.parse(startTime));
+            }
+            if (endTime != null && !endTime.trim().isEmpty()) {
+                consistentWrapper.le(CompareResult::getExecuteTime, LocalDateTime.parse(endTime));
+            }
+            long consistentResults = compareResultService.count(consistentWrapper);
+            
+            // 统计不一致的结果
+            LambdaQueryWrapper<CompareResult> inconsistentWrapper = new LambdaQueryWrapper<>();
+            inconsistentWrapper.eq(CompareResult::getCompareStatus, 0);
+            if (taskId != null) {
+                inconsistentWrapper.eq(CompareResult::getTaskId, taskId);
+            }
+            if (startTime != null && !startTime.trim().isEmpty()) {
+                inconsistentWrapper.ge(CompareResult::getExecuteTime, LocalDateTime.parse(startTime));
+            }
+            if (endTime != null && !endTime.trim().isEmpty()) {
+                inconsistentWrapper.le(CompareResult::getExecuteTime, LocalDateTime.parse(endTime));
+            }
+            long inconsistentResults = compareResultService.count(inconsistentWrapper);
+            
+            // 统计失败的结果
+            LambdaQueryWrapper<CompareResult> failedWrapper = new LambdaQueryWrapper<>();
+            failedWrapper.eq(CompareResult::getCompareStatus, -1);
+            if (taskId != null) {
+                failedWrapper.eq(CompareResult::getTaskId, taskId);
+            }
+            if (startTime != null && !startTime.trim().isEmpty()) {
+                failedWrapper.ge(CompareResult::getExecuteTime, LocalDateTime.parse(startTime));
+            }
+            if (endTime != null && !endTime.trim().isEmpty()) {
+                failedWrapper.le(CompareResult::getExecuteTime, LocalDateTime.parse(endTime));
+            }
+            long failedResults = compareResultService.count(failedWrapper);
+            
+            // 计算一致性率
+            double consistencyRate = totalResults > 0 ? (double) consistentResults / totalResults * 100 : 0.0;
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("totalCount", totalResults);
+            result.put("consistentCount", consistentResults);
+            result.put("inconsistentCount", inconsistentResults);
+            result.put("failedCount", failedResults);
+            result.put("consistencyRate", Math.round(consistencyRate * 100.0) / 100.0);
+            
             return Result.success("查询成功", result);
         } catch (Exception e) {
             log.error("获取结果统计失败", e);

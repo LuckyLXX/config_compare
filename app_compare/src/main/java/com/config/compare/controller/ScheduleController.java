@@ -1,6 +1,11 @@
 package com.config.compare.controller;
 
 import com.config.compare.common.result.Result;
+import com.config.compare.entity.CollectTask;
+import com.config.compare.entity.CompareTask;
+import com.config.compare.service.CollectTaskService;
+import com.config.compare.service.CompareTaskService;
+import com.config.compare.service.TaskSchedulerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -9,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,21 +33,70 @@ import java.util.Map;
 @Validated
 public class ScheduleController {
 
+    private final TaskSchedulerService taskSchedulerService;
+    private final CollectTaskService collectTaskService;
+    private final CompareTaskService compareTaskService;
+
     @Operation(summary = "获取调度任务列表")
     @GetMapping("/tasks")
     public Result<Object> getScheduleList(
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") Integer current,
             @Parameter(description = "页大小") @RequestParam(defaultValue = "10") Integer size,
             @Parameter(description = "任务名称") @RequestParam(required = false) String taskName,
+            @Parameter(description = "任务类型") @RequestParam(required = false) String taskType,
             @Parameter(description = "任务状态") @RequestParam(required = false) Integer status) {
         try {
-            // TODO: 实现调度任务查询逻辑
-            Map<String, Object> result = Map.of(
-                "records", List.of(),
-                "total", 0,
-                "current", current,
-                "size", size
-            );
+            List<Map<String, Object>> records = new java.util.ArrayList<>();
+            
+            // 获取定时采集任务
+            if (taskType == null || "COLLECT".equals(taskType)) {
+                List<CollectTask> collectTasks = taskSchedulerService.getScheduledCollectTasks();
+                for (CollectTask task : collectTasks) {
+                    if (taskName == null || task.getTaskName().contains(taskName)) {
+                        Map<String, Object> record = new HashMap<>();
+                        record.put("id", task.getId());
+                        record.put("taskName", task.getTaskName());
+                        record.put("taskType", "COLLECT");
+                        record.put("cronExpression", task.getCronExpression());
+                        record.put("status", task.getStatus());
+                        record.put("createTime", task.getCreateTime());
+                        record.put("nextExecutionTime", taskSchedulerService.getNextExecutionTime(task.getCronExpression()));
+                        records.add(record);
+                    }
+                }
+            }
+            
+            // 获取定时比对任务
+            if (taskType == null || "COMPARE".equals(taskType)) {
+                List<CompareTask> compareTasks = taskSchedulerService.getScheduledCompareTasks();
+                for (CompareTask task : compareTasks) {
+                    if (taskName == null || task.getTaskName().contains(taskName)) {
+                        Map<String, Object> record = new HashMap<>();
+                        record.put("id", task.getId());
+                        record.put("taskName", task.getTaskName());
+                        record.put("taskType", "COMPARE");
+                        record.put("cronExpression", task.getCronExpression());
+                        record.put("status", task.getStatus());
+                        record.put("createTime", task.getCreateTime());
+                        record.put("nextExecutionTime", taskSchedulerService.getNextExecutionTime(task.getCronExpression()));
+                        records.add(record);
+                    }
+                }
+            }
+            
+            // 状态过滤
+            if (status != null) {
+                records = records.stream()
+                    .filter(record -> status.equals(record.get("status")))
+                    .collect(java.util.stream.Collectors.toList());
+            }
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", records);
+            result.put("total", records.size());
+            result.put("current", current);
+            result.put("size", size);
+            
             return Result.success("查询成功", result);
         } catch (Exception e) {
             log.error("获取调度任务列表失败", e);
@@ -53,8 +108,28 @@ public class ScheduleController {
     @PostMapping("/tasks")
     public Result<Void> createScheduleTask(@RequestBody Map<String, Object> scheduleTask) {
         try {
-            // TODO: 实现创建调度任务逻辑
-            return Result.success("创建成功");
+            String taskType = (String) scheduleTask.get("taskType");
+            Long taskId = Long.valueOf(scheduleTask.get("taskId").toString());
+            
+            if ("COLLECT".equals(taskType)) {
+                CollectTask task = collectTaskService.getById(taskId);
+                if (task != null) {
+                    taskSchedulerService.scheduleCollectTask(task);
+                    return Result.success("采集任务调度创建成功");
+                } else {
+                    return Result.error("采集任务不存在");
+                }
+            } else if ("COMPARE".equals(taskType)) {
+                CompareTask task = compareTaskService.getById(taskId);
+                if (task != null) {
+                    taskSchedulerService.scheduleCompareTask(task);
+                    return Result.success("比对任务调度创建成功");
+                } else {
+                    return Result.error("比对任务不存在");
+                }
+            } else {
+                return Result.error("不支持的任务类型");
+            }
         } catch (Exception e) {
             log.error("创建调度任务失败", e);
             return Result.error("创建失败：" + e.getMessage());
@@ -66,8 +141,36 @@ public class ScheduleController {
     public Result<Void> updateScheduleTask(@Parameter(description = "任务ID") @PathVariable Long id,
                                            @RequestBody Map<String, Object> scheduleTask) {
         try {
-            // TODO: 实现更新调度任务逻辑
-            return Result.success("更新成功");
+            String taskType = (String) scheduleTask.get("taskType");
+            String cronExpression = (String) scheduleTask.get("cronExpression");
+            
+            if (cronExpression != null && !taskSchedulerService.validateCronExpression(cronExpression)) {
+                return Result.error("无效的Cron表达式");
+            }
+            
+            if ("COLLECT".equals(taskType)) {
+                CollectTask task = collectTaskService.getById(id);
+                if (task != null) {
+                    task.setCronExpression(cronExpression);
+                    collectTaskService.updateById(task);
+                    taskSchedulerService.updateCollectTaskSchedule(task);
+                    return Result.success("采集任务调度更新成功");
+                } else {
+                    return Result.error("采集任务不存在");
+                }
+            } else if ("COMPARE".equals(taskType)) {
+                CompareTask task = compareTaskService.getById(id);
+                if (task != null) {
+                    task.setCronExpression(cronExpression);
+                    compareTaskService.updateById(task);
+                    taskSchedulerService.updateCompareTaskSchedule(task);
+                    return Result.success("比对任务调度更新成功");
+                } else {
+                    return Result.error("比对任务不存在");
+                }
+            } else {
+                return Result.error("不支持的任务类型");
+            }
         } catch (Exception e) {
             log.error("更新调度任务失败", e);
             return Result.error("更新失败：" + e.getMessage());
@@ -76,10 +179,21 @@ public class ScheduleController {
 
     @Operation(summary = "删除调度任务")
     @DeleteMapping("/tasks/{id}")
-    public Result<Void> deleteScheduleTask(@Parameter(description = "任务ID") @PathVariable Long id) {
+    public Result<Void> deleteScheduleTask(@Parameter(description = "任务ID") @PathVariable Long id,
+                                           @RequestParam(required = false) String taskType) {
         try {
-            // TODO: 实现删除调度任务逻辑
-            return Result.success("删除成功");
+            if ("COLLECT".equals(taskType)) {
+                taskSchedulerService.unscheduleCollectTask(id);
+                return Result.success("采集任务调度删除成功");
+            } else if ("COMPARE".equals(taskType)) {
+                taskSchedulerService.unscheduleCompareTask(id);
+                return Result.success("比对任务调度删除成功");
+            } else {
+                // 尝试删除两种类型的任务
+                taskSchedulerService.unscheduleCollectTask(id);
+                taskSchedulerService.unscheduleCompareTask(id);
+                return Result.success("调度任务删除成功");
+            }
         } catch (Exception e) {
             log.error("删除调度任务失败", e);
             return Result.error("删除失败：" + e.getMessage());
@@ -211,8 +325,7 @@ public class ScheduleController {
     public Result<Boolean> validateCronExpression(@RequestBody Map<String, String> request) {
         try {
             String cronExpression = request.get("cronExpression");
-            // TODO: 实现Cron表达式验证逻辑
-            boolean isValid = cronExpression != null && !cronExpression.trim().isEmpty();
+            boolean isValid = taskSchedulerService.validateCronExpression(cronExpression);
             return Result.success("验证完成", isValid);
         } catch (Exception e) {
             log.error("验证Cron表达式失败", e);
@@ -225,8 +338,7 @@ public class ScheduleController {
     public Result<String> getNextExecutionTime(@RequestBody Map<String, String> request) {
         try {
             String cronExpression = request.get("cronExpression");
-            // TODO: 实现获取下次执行时间逻辑
-            String nextTime = "2025-01-26 10:00:00"; // 简单模拟，需要实现实际计算逻辑
+            String nextTime = taskSchedulerService.getNextExecutionTime(cronExpression);
             return Result.success("计算完成", nextTime);
         } catch (Exception e) {
             log.error("获取下次执行时间失败", e);

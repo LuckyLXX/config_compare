@@ -30,9 +30,24 @@ public class CompareExecution implements Serializable {
     private Long taskId;
 
     /**
-     * 执行状态：1-执行中，2-执行成功，3-执行失败，4-已取消
+     * 执行ID
      */
-    private Integer status;
+    private String executeId;
+
+    /**
+     * 使用的基线ID
+     */
+    private Long baselineId;
+
+    /**
+     * 基线版本
+     */
+    private String baselineVersion;
+
+    /**
+     * 执行状态：1-执行中，2-执行成功，3-执行失败
+     */
+    private Integer executeStatus;
 
     /**
      * 开始时间
@@ -49,27 +64,32 @@ public class CompareExecution implements Serializable {
     /**
      * 执行耗时（毫秒）
      */
-    private Long duration;
+    private Long durationMs;
 
     /**
-     * 目标服务器数量
+     * 总服务器数
      */
     private Integer totalServers;
 
     /**
-     * 成功比对数量
+     * 一致服务器数
      */
-    private Integer successCount;
+    private Integer consistentServers;
 
     /**
-     * 失败比对数量
+     * 不一致服务器数
      */
-    private Integer failedCount;
+    private Integer inconsistentServers;
 
     /**
-     * 有差异数量
+     * 比对失败服务器数
      */
-    private Integer diffCount;
+    private Integer failedServers;
+
+    /**
+     * 整体一致性评分
+     */
+    private java.math.BigDecimal overallScore;
 
     /**
      * 执行人

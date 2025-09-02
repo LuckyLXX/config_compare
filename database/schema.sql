@@ -328,10 +328,16 @@ CREATE TABLE compare_execution (
     start_time DATETIME NOT NULL COMMENT '开始时间',
     end_time DATETIME COMMENT '结束时间',
     duration_ms BIGINT COMMENT '执行耗时(毫秒)',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    execute_by VARCHAR(100) COMMENT '执行人',
+    error_message TEXT COMMENT '错误信息',
     INDEX idx_task_id (task_id),
     INDEX idx_execute_id (execute_id),
     INDEX idx_start_time (start_time),
-    INDEX idx_execute_status (execute_status)
+    INDEX idx_execute_status (execute_status),
+    INDEX idx_create_time (create_time),
+    INDEX idx_update_time (update_time)
 ) COMMENT='比对执行记录表';
 
 -- 比对结果表
@@ -351,11 +357,16 @@ CREATE TABLE compare_result (
     diff_summary LONGTEXT COMMENT '差异摘要JSON',
     execute_time DATETIME NOT NULL COMMENT '执行时间',
     duration_ms BIGINT COMMENT '执行耗时(毫秒)',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    error_message TEXT COMMENT '错误信息',
     INDEX idx_task_id (task_id),
     INDEX idx_execute_id (execute_id),
     INDEX idx_server_instance (server_instance_id),
     INDEX idx_execute_time (execute_time),
-    INDEX idx_compare_status (compare_status)
+    INDEX idx_compare_status (compare_status),
+    INDEX idx_create_time (create_time),
+    INDEX idx_update_time (update_time)
 ) COMMENT='比对结果表';
 
 -- 差异详情表

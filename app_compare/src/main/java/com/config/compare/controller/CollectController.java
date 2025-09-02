@@ -49,8 +49,18 @@ public class CollectController {
             @Parameter(description = "模板类型") @RequestParam(required = false) String templateType,
             @Parameter(description = "状态") @RequestParam(required = false) Integer status) {
         try {
-            IPage<CollectTemplate> result = collectTemplateService.getTemplateList(current, size, templateName, templateType, status);
-            return Result.success("查询成功", result);
+            // 如果没有指定分页参数，返回所有启用的模板
+            if (current == 1 && size == 10 && templateName == null && templateType == null && status == null) {
+                List<CollectTemplate> allTemplates = collectTemplateService.list();
+                // 构造分页结果
+                IPage<CollectTemplate> result = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, allTemplates.size());
+                result.setRecords(allTemplates);
+                result.setTotal(allTemplates.size());
+                return Result.success("查询成功", result);
+            } else {
+                IPage<CollectTemplate> result = collectTemplateService.getTemplateList(current, size, templateName, templateType, status);
+                return Result.success("查询成功", result);
+            }
         } catch (Exception e) {
             log.error("获取采集模板列表失败", e);
             return Result.error("查询失败：" + e.getMessage());

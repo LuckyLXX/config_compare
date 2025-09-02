@@ -156,7 +156,7 @@ public class CompareResultModel {
         double score = Math.max(0, (maxWeight - totalWeight) / maxWeight * 100);
         this.consistencyScore = BigDecimal.valueOf(score).setScale(2, BigDecimal.ROUND_HALF_UP);
         
-        this.consistent = this.consistencyScore.compareTo(BigDecimal.valueOf(95)) >= 0;
+        this.consistent = this.consistencyScore.compareTo(BigDecimal.valueOf(100)) == 0;
     }
 
     /**

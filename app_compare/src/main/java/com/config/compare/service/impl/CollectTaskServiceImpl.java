@@ -16,8 +16,10 @@ import com.config.compare.service.CollectTaskService;
 import com.config.compare.service.CollectTemplateService;
 import com.config.compare.service.SystemInfoService;
 import com.config.compare.service.ServerInstanceService;
-import lombok.RequiredArgsConstructor;
+import com.config.compare.service.TaskSchedulerService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -36,14 +38,26 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, CollectTask> implements CollectTaskService {
 
-    private final CollectTemplateService collectTemplateService;
-    private final SystemInfoService systemInfoService;
-    private final CollectService collectService;
-    private final CollectExecutionService collectExecutionService;
-    private final ServerInstanceService serverInstanceService;
+    @Autowired
+    private CollectTemplateService collectTemplateService;
+    
+    @Autowired
+    private SystemInfoService systemInfoService;
+    
+    @Autowired
+    private CollectService collectService;
+    
+    @Autowired
+    private CollectExecutionService collectExecutionService;
+    
+    @Autowired
+    private ServerInstanceService serverInstanceService;
+    
+    @Autowired
+    @Lazy
+    private TaskSchedulerService taskSchedulerService;
 
     @Override
     public IPage<Map<String, Object>> getTaskListWithDetails(int current, int size, String taskName, Long systemId, Integer executeType) {
@@ -175,13 +189,28 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
             task.setRetryCount(2);
         }
 
-        return this.save(task);
+        boolean result = this.save(task);
+        
+        // 如果是定时任务，注册到调度器
+        if (result && task.getExecuteType() == 2 && task.getCronExpression() != null) {
+            taskSchedulerService.scheduleCollectTask(task);
+        }
+        
+        return result;
     }
 
     @Override
     public boolean updateTask(CollectTask task) {
         log.info("更新采集任务: id={}, name={}", task.getId(), task.getTaskName());
-        return this.updateById(task);
+        
+        boolean result = this.updateById(task);
+        
+        // 如果是定时任务，更新调度器
+        if (result && task.getExecuteType() == 2 && task.getCronExpression() != null) {
+            taskSchedulerService.updateCollectTaskSchedule(task);
+        }
+        
+        return result;
     }
 
     @Override

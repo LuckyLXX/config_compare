@@ -228,13 +228,39 @@
           label="Cron表达式"
           prop="cronExpression"
         >
-          <el-input
-            v-model="form.cronExpression"
-            placeholder="请输入Cron表达式，如：0 0 2 * * ?"
-            maxlength="100"
-          />
+          <div class="cron-input-group">
+            <el-input
+              v-model="form.cronExpression"
+              placeholder="请输入Cron表达式，如：0 0 2 * * ?"
+              maxlength="100"
+              @blur="validateCronExpression"
+            />
+            <el-button 
+              type="primary" 
+              size="small" 
+              @click="validateCronExpression"
+              :loading="validatingCron"
+            >
+              验证
+            </el-button>
+            <el-button 
+              type="info" 
+              size="small" 
+              @click="showCronHelper = true"
+            >
+              帮助
+            </el-button>
+          </div>
           <div class="field-tip">
             示例：0 0 2 * * ? (每天凌晨2点执行)
+          </div>
+          <div v-if="cronValidationResult" class="validation-result">
+            <el-tag :type="cronValidationResult.valid ? 'success' : 'danger'">
+              {{ cronValidationResult.message }}
+            </el-tag>
+            <div v-if="cronValidationResult.nextExecution" class="next-execution">
+              下次执行时间：{{ cronValidationResult.nextExecution }}
+            </div>
           </div>
         </el-form-item>
 
@@ -338,6 +364,48 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- Cron表达式帮助对话框 -->
+    <el-dialog
+      v-model="showCronHelper"
+      title="Cron表达式帮助"
+      width="600px"
+    >
+      <div class="cron-helper">
+        <h4>Cron表达式格式说明</h4>
+        <p>Cron表达式由6个字段组成：<code>秒 分 时 日 月 周</code></p>
+        
+        <el-table :data="cronExamples" border style="width: 100%">
+          <el-table-column prop="expression" label="表达式" width="150" />
+          <el-table-column prop="description" label="说明" />
+        </el-table>
+        
+        <h4 style="margin-top: 20px;">字段说明</h4>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="秒">0-59</el-descriptions-item>
+          <el-descriptions-item label="分">0-59</el-descriptions-item>
+          <el-descriptions-item label="时">0-23</el-descriptions-item>
+          <el-descriptions-item label="日">1-31</el-descriptions-item>
+          <el-descriptions-item label="月">1-12</el-descriptions-item>
+          <el-descriptions-item label="周">0-7 (0和7都表示周日)</el-descriptions-item>
+        </el-descriptions>
+        
+        <h4 style="margin-top: 20px;">特殊字符</h4>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="*">表示任意值</el-descriptions-item>
+          <el-descriptions-item label="?">表示不指定值（仅用于日和周）</el-descriptions-item>
+          <el-descriptions-item label="-">表示范围，如：1-5</el-descriptions-item>
+          <el-descriptions-item label="/">表示步长，如：*/5</el-descriptions-item>
+          <el-descriptions-item label=",">表示列表，如：1,3,5</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showCronHelper = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -362,6 +430,9 @@ export default {
     // 对话框相关
     const dialogVisible = ref(false)
     const isEdit = ref(false)
+    const showCronHelper = ref(false)
+    const validatingCron = ref(false)
+    const cronValidationResult = ref(null)
     
     // 任务表单
     const form = reactive({
@@ -394,6 +465,20 @@ export default {
       total: 0
     })
     
+    // Cron表达式示例
+    const cronExamples = ref([
+      { expression: '0 0 2 * * ?', description: '每天凌晨2点执行' },
+      { expression: '0 30 9 * * ?', description: '每天上午9点30分执行' },
+      { expression: '0 0 12 * * ?', description: '每天中午12点执行' },
+      { expression: '0 0 18 * * ?', description: '每天下午6点执行' },
+      { expression: '0 0 0 1 * ?', description: '每月1号0点执行' },
+      { expression: '0 0 9 ? * MON-FRI', description: '工作日（周一到周五）上午9点执行' },
+      { expression: '0 0 10 ? * SUN', description: '每周日上午10点执行' },
+      { expression: '0 */30 * * * ?', description: '每30分钟执行一次' },
+      { expression: '0 0 */2 * * ?', description: '每2小时执行一次' },
+      { expression: '0 0 0 1 1 ?', description: '每年1月1日0点执行' }
+    ])
+
     // 表单验证规则
     const rules = reactive({
       taskName: [
@@ -470,9 +555,9 @@ export default {
     // 获取系统列表
     const getSystemList = async () => {
       try {
-        const response = await systemApi.getSystemList()
-        const data = response.data || response
-        systemList.value = data.records || []
+        const response = await systemApi.getAllSystemList()
+        // 系统列表API返回的是直接的List，不是分页格式
+        systemList.value = response.data || []
         console.log('获取到的系统列表:', systemList.value) // 调试日志
       } catch (error) {
         console.error('获取系统列表失败:', error)
@@ -483,6 +568,7 @@ export default {
     const getTemplateList = async () => {
       try {
         const response = await collectTemplateApi.getTemplateList()
+        // 模板列表API返回的是分页格式
         const data = response.data || response
         templateList.value = data.records || []
         console.log('获取到的模板列表:', templateList.value) // 调试日志
@@ -499,8 +585,9 @@ export default {
       }
       try {
         const response = await systemApi.getServerTypesBySystem(systemId)
-        const data = response.data || response
-        serverTypeList.value = data || []
+        // 服务器类型API返回的是直接的List
+        serverTypeList.value = response.data || []
+        console.log('获取到的服务器类型列表:', serverTypeList.value) // 调试日志
       } catch (error) {
         console.error('获取服务器类型列表失败:', error)
         serverTypeList.value = []
@@ -519,8 +606,9 @@ export default {
           serverTypeIds: serverTypeIds && serverTypeIds.length > 0 ? serverTypeIds.join(',') : undefined
         }
         const response = await systemApi.getServerInstancesBySystem(params)
-        const data = response.data || response
-        serverInstanceList.value = data || []
+        // 服务器实例API返回的是直接的List
+        serverInstanceList.value = response.data || []
+        console.log('获取到的服务器实例列表:', serverInstanceList.value) // 调试日志
       } catch (error) {
         console.error('获取服务器实例列表失败:', error)
         serverInstanceList.value = []
@@ -567,15 +655,36 @@ export default {
       try {
         isEdit.value = true
         
+        // 确保基础数据已加载
+        if (systemList.value.length === 0) {
+          await getSystemList()
+        }
+        if (templateList.value.length === 0) {
+          await getTemplateList()
+        }
+        
         // 获取完整的任务详情
         const response = await collectTaskApi.getTaskById(row.id)
         const taskData = response.data || response
         
+        // 设置表单数据
         Object.assign(form, {
           ...taskData,
           serverTypeIds: taskData.serverTypeIds ? taskData.serverTypeIds.split(',').map(Number) : [],
           serverInstanceIds: taskData.serverInstanceIds ? taskData.serverInstanceIds.split(',').map(Number) : []
         })
+        
+        // 加载相关的服务器类型和实例数据
+        if (taskData.systemId) {
+          await getServerTypeList(taskData.systemId)
+          await getServerInstanceList(taskData.systemId, form.serverTypeIds)
+        }
+        
+        console.log('编辑采集任务数据:', form)
+        console.log('系统列表:', systemList.value)
+        console.log('模板列表:', templateList.value)
+        console.log('服务器类型列表:', serverTypeList.value)
+        console.log('服务器实例列表:', serverInstanceList.value)
         
         dialogVisible.value = true
       } catch (error) {
@@ -685,6 +794,70 @@ export default {
       return statusMap[status] || 'info'
     }
     
+    // Cron表达式验证
+    const validateCronExpression = async () => {
+      if (!form.cronExpression || form.executeType !== 2) {
+        cronValidationResult.value = null
+        return
+      }
+      
+      validatingCron.value = true
+      try {
+        const response = await fetch('/api/schedule/validate-cron', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ cronExpression: form.cronExpression })
+        })
+        
+        const result = await response.json()
+        
+        if (result.success) {
+          cronValidationResult.value = {
+            valid: result.data,
+            message: result.data ? 'Cron表达式有效' : 'Cron表达式无效',
+            nextExecution: null
+          }
+          
+          // 如果有效，获取下次执行时间
+          if (result.data) {
+            try {
+              const nextResponse = await fetch('/api/schedule/next-execution', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ cronExpression: form.cronExpression })
+              })
+              
+              const nextResult = await nextResponse.json()
+              if (nextResult.success) {
+                cronValidationResult.value.nextExecution = nextResult.data
+              }
+            } catch (error) {
+              console.error('获取下次执行时间失败:', error)
+            }
+          }
+        } else {
+          cronValidationResult.value = {
+            valid: false,
+            message: result.message || '验证失败',
+            nextExecution: null
+          }
+        }
+      } catch (error) {
+        console.error('验证Cron表达式失败:', error)
+        cronValidationResult.value = {
+          valid: false,
+          message: '验证失败：' + (error.message || '未知错误'),
+          nextExecution: null
+        }
+      } finally {
+        validatingCron.value = false
+      }
+    }
+
     const getExecuteStatusIcon = (status) => {
       const iconMap = {
         1: 'Check',      // 成功
@@ -809,6 +982,10 @@ export default {
       pagination,
       dialogVisible,
       isEdit,
+      showCronHelper,
+      validatingCron,
+      cronValidationResult,
+      cronExamples,
       form,
       rules,
       handleSearch,
@@ -826,6 +1003,7 @@ export default {
       handleViewResults,
       handleSystemChange,
       handleServerTypeChange,
+      validateCronExpression,
       getExecuteStatusType,
       getExecuteStatusIcon,
       getExecuteStatusText,
@@ -880,5 +1058,44 @@ export default {
 
 .dialog-footer {
   text-align: right;
+}
+
+.cron-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  
+  .el-input {
+    flex: 1;
+  }
+}
+
+.validation-result {
+  margin-top: 8px;
+  
+  .next-execution {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+}
+
+.cron-helper {
+  h4 {
+    margin: 16px 0 8px 0;
+    color: #333;
+  }
+  
+  p {
+    margin: 8px 0;
+    color: #666;
+  }
+  
+  code {
+    background: #f5f5f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+  }
 }
 </style>

@@ -278,10 +278,39 @@
           label="Cron表达式" 
           prop="cronExpression"
         >
-          <el-input
-            v-model="form.cronExpression"
-            placeholder="请输入Cron表达式，如：0 0 2 * * ?"
-          />
+          <div class="cron-input-group">
+            <el-input
+              v-model="form.cronExpression"
+              placeholder="请输入Cron表达式，如：0 0 2 * * ?"
+              @blur="validateCronExpression"
+            />
+            <el-button 
+              type="primary" 
+              size="small" 
+              @click="validateCronExpression"
+              :loading="validatingCron"
+            >
+              验证
+            </el-button>
+            <el-button 
+              type="info" 
+              size="small" 
+              @click="showCronHelper = true"
+            >
+              帮助
+            </el-button>
+          </div>
+          <div class="field-tip">
+            示例：0 0 2 * * ? (每天凌晨2点执行)
+          </div>
+          <div v-if="cronValidationResult" class="validation-result">
+            <el-tag :type="cronValidationResult.valid ? 'success' : 'danger'">
+              {{ cronValidationResult.message }}
+            </el-tag>
+            <div v-if="cronValidationResult.nextExecution" class="next-execution">
+              下次执行时间：{{ cronValidationResult.nextExecution }}
+            </div>
+          </div>
         </el-form-item>
 
         <el-form-item label="自动执行">
@@ -380,6 +409,48 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Cron表达式帮助对话框 -->
+    <el-dialog
+      v-model="showCronHelper"
+      title="Cron表达式帮助"
+      width="600px"
+    >
+      <div class="cron-helper">
+        <h4>Cron表达式格式说明</h4>
+        <p>Cron表达式由6个字段组成：<code>秒 分 时 日 月 周</code></p>
+        
+        <el-table :data="cronExamples" border style="width: 100%">
+          <el-table-column prop="expression" label="表达式" width="150" />
+          <el-table-column prop="description" label="说明" />
+        </el-table>
+        
+        <h4 style="margin-top: 20px;">字段说明</h4>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="秒">0-59</el-descriptions-item>
+          <el-descriptions-item label="分">0-59</el-descriptions-item>
+          <el-descriptions-item label="时">0-23</el-descriptions-item>
+          <el-descriptions-item label="日">1-31</el-descriptions-item>
+          <el-descriptions-item label="月">1-12</el-descriptions-item>
+          <el-descriptions-item label="周">0-7 (0和7都表示周日)</el-descriptions-item>
+        </el-descriptions>
+        
+        <h4 style="margin-top: 20px;">特殊字符</h4>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="*">表示任意值</el-descriptions-item>
+          <el-descriptions-item label="?">表示不指定值（仅用于日和周）</el-descriptions-item>
+          <el-descriptions-item label="-">表示范围，如：1-5</el-descriptions-item>
+          <el-descriptions-item label="/">表示步长，如：*/5</el-descriptions-item>
+          <el-descriptions-item label=",">表示列表，如：1,3,5</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showCronHelper = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -413,6 +484,9 @@ export default {
     const dialogVisible = ref(false)
     const isEdit = ref(false)
     const formRef = ref(null)
+    const showCronHelper = ref(false)
+    const validatingCron = ref(false)
+    const cronValidationResult = ref(null)
     
     // 搜索表单
     const searchForm = reactive({
@@ -451,6 +525,20 @@ export default {
       status: 1
     })
     
+    // Cron表达式示例
+    const cronExamples = ref([
+      { expression: '0 0 2 * * ?', description: '每天凌晨2点执行' },
+      { expression: '0 30 9 * * ?', description: '每天上午9点30分执行' },
+      { expression: '0 0 12 * * ?', description: '每天中午12点执行' },
+      { expression: '0 0 18 * * ?', description: '每天下午6点执行' },
+      { expression: '0 0 0 1 * ?', description: '每月1号0点执行' },
+      { expression: '0 0 9 ? * MON-FRI', description: '工作日（周一到周五）上午9点执行' },
+      { expression: '0 0 10 ? * SUN', description: '每周日上午10点执行' },
+      { expression: '0 */30 * * * ?', description: '每30分钟执行一次' },
+      { expression: '0 0 */2 * * ?', description: '每2小时执行一次' },
+      { expression: '0 0 0 1 1 ?', description: '每年1月1日0点执行' }
+    ])
+
     // 表单验证规则
     const rules = {
       taskName: [
@@ -492,10 +580,46 @@ export default {
           size: pagination.size
         }
         const response = await compareTaskApi.getTaskList(params)
-        taskList.value = response.records || []
-        pagination.total = response.total || 0
+        console.log('比对任务列表API响应:', response)
+        
+        // 兼容不同的响应格式
+        const rawTaskList = response.data?.records || response.records || []
+        pagination.total = response.data?.total || response.total || 0
+        
+        console.log('原始任务列表:', rawTaskList)
+        console.log('总数:', pagination.total)
+        
+        // 为任务列表添加系统名称和分类名称
+        taskList.value = rawTaskList.map(task => {
+          const system = systemList.value.find(sys => sys.id === task.systemId)
+          const category = categoryList.value.find(cat => cat.id === task.categoryId)
+          
+          console.log(`处理任务 ${task.taskName}:`)
+          console.log(`- systemId: ${task.systemId}, 找到系统: ${system ? system.systemName : '未找到'}`)
+          console.log(`- categoryId: ${task.categoryId}, 找到分类: ${category ? category.categoryName : '未找到'}`)
+          console.log(`- 当前categoryList长度: ${categoryList.value.length}`)
+          
+          // 如果找不到分类，尝试重新获取配置分类数据
+          if (!category && categoryList.value.length === 0) {
+            console.warn('配置分类列表为空，尝试重新获取...')
+            getCategoryList().then(() => {
+              // 重新处理任务列表
+              getTaskList()
+            })
+          }
+          
+          return {
+            ...task,
+            systemName: system ? system.systemName : `系统${task.systemId}`,
+            categoryName: category ? category.categoryName : `分类${task.categoryId}`
+          }
+        })
+        
+        console.log('处理后的任务列表:', taskList.value)
       } catch (error) {
         console.error('获取任务列表失败:', error)
+        taskList.value = []
+        pagination.total = 0
       } finally {
         loading.value = false
       }
@@ -504,10 +628,16 @@ export default {
     // 获取系统列表
     const getSystemList = async () => {
       try {
-        const response = await systemApi.getSystemList({ current: 1, size: 1000 })
-        systemList.value = response.data || []
+        const response = await systemApi.getAllSystemList()
+        console.log('系统列表API响应:', response)
+        
+        // 兼容不同的响应格式
+        systemList.value = response.data || response.records || []
+        
+        console.log('解析后的系统列表:', systemList.value)
       } catch (error) {
         console.error('获取系统列表失败:', error)
+        systemList.value = []
       }
     }
     
@@ -534,17 +664,49 @@ export default {
     // 获取配置分类列表（按系统）
     const getCategoryList = async (systemId) => {
       try {
+        console.log('开始获取配置分类，systemId:', systemId);
+        
+        let res;
+        // 如果有systemId，则根据系统获取配置分类
+        if (systemId) {
+          res = await categoryApi.getCategoriesBySystem(systemId)
+          console.log('根据系统获取配置分类API响应:', res);
+        } else {
+          // 否则获取所有启用的配置分类
+          res = await categoryApi.getCategoryList()
+          console.log('配置分类API响应:', res);
+        }
+        
+        // 解析响应数据
+        const categories = res.data || res || [];
+        console.log('解析后的配置分类数据:', categories);
+        
+        // 检查数据结构
+        if (categories.length > 0) {
+          console.log('第一个分类示例:', categories[0]);
+        }
+        
+        categoryList.value = [...categories];
+        console.log('更新后的categoryList长度:', categoryList.value.length);
+      } catch (e) {
+        console.error('获取配置分类失败:', e)
+        categoryList.value = []
+      }
+    }
+
+    // 根据系统ID获取配置分类列表
+    const getCategoryListBySystem = async (systemId) => {
+      try {
         if (!systemId) { 
           categoryList.value = []; 
           console.log('清空配置分类列表'); 
           return 
         }
-        console.log('开始获取配置分类，systemId:', systemId);
+        console.log('开始根据系统获取配置分类，systemId:', systemId);
         
-        // 临时解决方案：先获取所有启用的配置分类
-        // 后续可以根据实际业务需求调整API
-        const res = await categoryApi.getCategoryList()
-        console.log('配置分类API响应:', res);
+        // 调用后端API获取根据系统过滤的配置分类
+        const res = await categoryApi.getCategoriesBySystem(systemId)
+        console.log('根据系统获取配置分类API响应:', res);
         
         // 确保数据结构正确
         const categories = res.data || res || [];
@@ -554,8 +716,10 @@ export default {
         categoryList.value = [...categories];
         console.log('更新后的categoryList:', categoryList.value);
       } catch (e) {
-        console.error('获取配置分类失败:', e)
-        categoryList.value = []
+        console.error('根据系统获取配置分类失败:', e)
+        // 如果根据系统获取失败，回退到获取所有启用的配置分类
+        console.log('回退到获取所有启用的配置分类');
+        await getCategoryList(systemId)
       }
     }
 
@@ -616,12 +780,35 @@ export default {
       dialogVisible.value = true
     }
     
-    const handleEdit = (row) => {
+    const handleEdit = async (row) => {
       isEdit.value = true
+      
+      // 确保基础数据已加载
+      if (systemList.value.length === 0) {
+        await getSystemList()
+      }
+      if (categoryList.value.length === 0 && row.systemId) {
+        await getCategoryListBySystem(row.systemId)
+      }
+      if (baselineList.value.length === 0 && row.systemId && row.categoryId) {
+        await getBaselineList(row.systemId, row.categoryId)
+      }
+      if (collectTaskList.value.length === 0) {
+        await getCollectTaskList()
+      }
+      
+      // 设置表单数据
       Object.assign(form, {
         ...row
         // 移除targetServerIds处理，因为采集任务已经指定了服务器范围
       })
+      
+      console.log('编辑任务数据:', form)
+      console.log('系统列表:', systemList.value)
+      console.log('配置分类列表:', categoryList.value)
+      console.log('基线列表:', baselineList.value)
+      console.log('采集任务列表:', collectTaskList.value)
+      
       dialogVisible.value = true
     }
     
@@ -717,6 +904,70 @@ export default {
     //   // 清空并尝试加载基线（需要分类）
     //     baselineList.value = []
     // }
+
+    // Cron表达式验证
+    const validateCronExpression = async () => {
+      if (!form.cronExpression || form.executeType !== 2) {
+        cronValidationResult.value = null
+        return
+      }
+      
+      validatingCron.value = true
+      try {
+        const response = await fetch('/api/schedule/validate-cron', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ cronExpression: form.cronExpression })
+        })
+        
+        const result = await response.json()
+        
+        if (result.success) {
+          cronValidationResult.value = {
+            valid: result.data,
+            message: result.data ? 'Cron表达式有效' : 'Cron表达式无效',
+            nextExecution: null
+          }
+          
+          // 如果有效，获取下次执行时间
+          if (result.data) {
+            try {
+              const nextResponse = await fetch('/api/schedule/next-execution', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ cronExpression: form.cronExpression })
+              })
+              
+              const nextResult = await nextResponse.json()
+              if (nextResult.success) {
+                cronValidationResult.value.nextExecution = nextResult.data
+              }
+            } catch (error) {
+              console.error('获取下次执行时间失败:', error)
+            }
+          }
+        } else {
+          cronValidationResult.value = {
+            valid: false,
+            message: result.message || '验证失败',
+            nextExecution: null
+          }
+        }
+      } catch (error) {
+        console.error('验证Cron表达式失败:', error)
+        cronValidationResult.value = {
+          valid: false,
+          message: '验证失败：' + (error.message || '未知错误'),
+          nextExecution: null
+        }
+      } finally {
+        validatingCron.value = false
+      }
+    }
 
     // 分类选择变化时加载基线
     const handleCategoryChange = async (categoryId) => {
@@ -856,12 +1107,33 @@ export default {
     
     // 初始化
     onMounted(async () => {
-      await Promise.all([
-        getTaskList(),
-        getSystemList(),
-        // 移除getServerTypeList，因为不再需要服务器类型选择
-        getCollectTaskList()
-      ])
+      try {
+        console.log('开始初始化比对任务页面...')
+        
+        // 先加载基础数据
+        await Promise.all([
+          getSystemList(),
+          getCollectTaskList()
+        ])
+        
+        // 加载所有配置分类（用于显示分类名称）
+        console.log('开始加载配置分类...')
+        await getCategoryList()
+        console.log('配置分类加载完成，数量:', categoryList.value.length)
+        
+        // 最后加载任务列表（需要系统名称和分类名称）
+        console.log('开始加载任务列表...')
+        await getTaskList()
+        console.log('任务列表加载完成，数量:', taskList.value.length)
+        
+        // 调试信息
+        console.log('初始化完成:')
+        console.log('- 系统列表数量:', systemList.value.length)
+        console.log('- 配置分类数量:', categoryList.value.length)
+        console.log('- 任务列表数量:', taskList.value.length)
+      } catch (error) {
+        console.error('初始化失败:', error)
+      }
     })
     
     return {
@@ -877,6 +1149,10 @@ export default {
       selectedRows,
       dialogVisible,
       isEdit,
+      showCronHelper,
+      validatingCron,
+      cronValidationResult,
+      cronExamples,
       formRef,
       searchForm,
       pagination,
@@ -897,6 +1173,7 @@ export default {
       handleSystemChange,
       // 移除handleServerTypeChange，因为不再需要服务器类型选择
       handleCategoryChange,
+      validateCronExpression,
 
       handleSubmit,
       handleDialogClose,
@@ -945,6 +1222,52 @@ export default {
     border-radius: 6px;
     padding: 20px;
     background: #fafafa;
+  }
+  
+  .field-tip {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  
+  .cron-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    
+    .el-input {
+      flex: 1;
+    }
+  }
+  
+  .validation-result {
+    margin-top: 8px;
+    
+    .next-execution {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+  }
+  
+  .cron-helper {
+    h4 {
+      margin: 16px 0 8px 0;
+      color: #333;
+    }
+    
+    p {
+      margin: 8px 0;
+      color: #666;
+    }
+    
+    code {
+      background: #f5f5f5;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+    }
   }
   
   .rule-config {

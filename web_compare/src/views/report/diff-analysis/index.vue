@@ -284,7 +284,7 @@ export default {
     // 获取系统列表
     const loadSystemOptions = async () => {
       try {
-        const response = await systemApi.getSystemList({ pageSize: 1000 })
+        const response = await systemApi.getAllSystemList()
         systemOptions.value = response.data.records || []
       } catch (error) {
         console.error('获取系统列表失败:', error)

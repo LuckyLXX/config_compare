@@ -41,6 +41,12 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
                      context.getBaselineContent() != null ? context.getBaselineContent().length() : 0,
                      context.getCurrentContent() != null ? context.getCurrentContent().length() : 0);
             
+            // 添加详细的调试日志
+            log.info("=== 比对内容详情 ===");
+            log.info("基线内容：\n{}", context.getBaselineContent());
+            log.info("当前内容：\n{}", context.getCurrentContent());
+            log.info("==================");
+            
             CompareResultModel result = doTextCompare(context);
             result.setAlgorithmType(getAlgorithmType());
             result.setDuration(startTime);
@@ -125,21 +131,53 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
     private void compareLinesWithSideBySide(List<String> baselineLines, List<String> currentLines, 
                                           CompareResultModel result, Map<String, Object> compareRules) {
         
+        // 添加调试日志
+        log.info("=== 行比对详情 ===");
+        log.info("原始基线行数: {}", baselineLines.size());
+        log.info("原始当前行数: {}", currentLines.size());
+        for (int i = 0; i < baselineLines.size(); i++) {
+            log.info("基线行{}: '{}'", i + 1, baselineLines.get(i));
+        }
+        for (int i = 0; i < currentLines.size(); i++) {
+            log.info("当前行{}: '{}'", i + 1, currentLines.get(i));
+        }
+        
         // 获取比对规则
         boolean ignoreWhitespace = getBooleanRule(compareRules, "ignoreWhitespace", false);
         boolean ignoreCase = getBooleanRule(compareRules, "ignoreCase", false);
         boolean ignoreComments = getBooleanRule(compareRules, "ignoreComments", false);
         List<String> ignoreLines = getStringListRule(compareRules, "ignoreLines", new ArrayList<>());
         
+        log.info("比对规则: ignoreWhitespace={}, ignoreCase={}, ignoreComments={}, ignoreLines={}", 
+                ignoreWhitespace, ignoreCase, ignoreComments, ignoreLines);
+        
         // 预处理行内容
         List<String> processedBaselineLines = preprocessLines(baselineLines, ignoreWhitespace, ignoreCase, ignoreComments, ignoreLines);
         List<String> processedCurrentLines = preprocessLines(currentLines, ignoreWhitespace, ignoreCase, ignoreComments, ignoreLines);
         
+        log.info("预处理后基线行数: {}", processedBaselineLines.size());
+        log.info("预处理后当前行数: {}", processedCurrentLines.size());
+        for (int i = 0; i < processedBaselineLines.size(); i++) {
+            log.info("处理后基线行{}: '{}'", i + 1, processedBaselineLines.get(i));
+        }
+        for (int i = 0; i < processedCurrentLines.size(); i++) {
+            log.info("处理后当前行{}: '{}'", i + 1, processedCurrentLines.get(i));
+        }
+        
         // 使用Myers差分算法进行行比对
         List<DiffLine> diffLines = computeDiffLines(processedBaselineLines, processedCurrentLines);
         
+        log.info("计算出的差异行数: {}", diffLines.size());
+        for (DiffLine diffLine : diffLines) {
+            log.info("差异行: type={}, baselineIndex={}, currentIndex={}, baselineValue='{}', currentValue='{}'", 
+                    diffLine.type, diffLine.baselineIndex, diffLine.currentIndex, diffLine.baselineValue, diffLine.currentValue);
+        }
+        
         // 生成差异项
         generateDiffItems(diffLines, baselineLines, currentLines, result);
+        
+        log.info("生成的差异项数: {}", result.getDiffCount());
+        log.info("==================");
     }
 
     /**
@@ -149,32 +187,43 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
                                        boolean ignoreComments, List<String> ignoreLines) {
         List<String> processed = new ArrayList<>();
         
-        for (String line : lines) {
+        log.info("开始预处理，输入行数: {}", lines.size());
+        
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
             String processedLine = line;
+            
+            log.info("处理第{}行: '{}'", i + 1, line);
             
             // 忽略注释行
             if (ignoreComments && isCommentLine(line)) {
+                log.info("第{}行被识别为注释行，跳过", i + 1);
                 continue;
             }
             
             // 忽略指定关键词的行
             if (shouldIgnoreLine(line, ignoreLines)) {
+                log.info("第{}行包含忽略关键词，跳过", i + 1);
                 continue;
             }
             
             // 忽略空白字符
             if (ignoreWhitespace) {
                 processedLine = processedLine.trim();
+                log.info("第{}行去除空白后: '{}'", i + 1, processedLine);
             }
             
             // 忽略大小写
             if (ignoreCase) {
                 processedLine = processedLine.toLowerCase();
+                log.info("第{}行转小写后: '{}'", i + 1, processedLine);
             }
             
+            log.info("第{}行处理完成，添加到结果: '{}'", i + 1, processedLine);
             processed.add(processedLine);
         }
         
+        log.info("预处理完成，输出行数: {}", processed.size());
         return processed;
     }
 
@@ -197,7 +246,8 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
         
         String lowerLine = line.toLowerCase();
         for (String ignorePattern : ignoreLines) {
-            if (lowerLine.contains(ignorePattern.toLowerCase().trim())) {
+            String trimmedPattern = ignorePattern.toLowerCase().trim();
+            if (!trimmedPattern.isEmpty() && lowerLine.contains(trimmedPattern)) {
                 return true;
             }
         }
@@ -205,49 +255,34 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
     }
 
     /**
-     * 计算行差异
+     * 计算行差异（行号对齐方式）
      */
     private List<DiffLine> computeDiffLines(List<String> baselineLines, List<String> currentLines) {
         List<DiffLine> diffLines = new ArrayList<>();
         
-        // 使用简单的LCS算法计算差异
-        int[][] lcs = computeLCS(baselineLines, currentLines);
-        List<DiffLine> lcsResult = backtrackLCS(lcs, baselineLines, currentLines, baselineLines.size(), currentLines.size());
+        // 使用行号对齐的方式，总行数取较大的
+        int maxLines = Math.max(baselineLines.size(), currentLines.size());
         
-        // 转换为完整的差异行列表
-        int baselineIndex = 0;
-        int currentIndex = 0;
-        
-        for (DiffLine diffLine : lcsResult) {
-            // 添加删除的行
-            while (baselineIndex < diffLine.baselineIndex) {
-                diffLines.add(new DiffLine(DiffType.DELETE, baselineIndex, -1, baselineLines.get(baselineIndex), null));
-                baselineIndex++;
-            }
+        for (int i = 0; i < maxLines; i++) {
+            String baselineLine = i < baselineLines.size() ? baselineLines.get(i) : null;
+            String currentLine = i < currentLines.size() ? currentLines.get(i) : null;
             
-            // 添加新增的行
-            while (currentIndex < diffLine.currentIndex) {
-                diffLines.add(new DiffLine(DiffType.ADD, -1, currentIndex, null, currentLines.get(currentIndex)));
-                currentIndex++;
+            if (baselineLine == null && currentLine == null) {
+                // 两行都为空，不应该发生
+                continue;
+            } else if (baselineLine == null) {
+                // 基线没有，当前有 - 新增
+                diffLines.add(new DiffLine(DiffType.ADD, -1, i, null, currentLine));
+            } else if (currentLine == null) {
+                // 基线有，当前没有 - 删除
+                diffLines.add(new DiffLine(DiffType.DELETE, i, -1, baselineLine, null));
+            } else if (!baselineLine.equals(currentLine)) {
+                // 两行都有但内容不同 - 修改
+                diffLines.add(new DiffLine(DiffType.MODIFY, i, i, baselineLine, currentLine));
+            } else {
+                // 两行都有且内容相同 - 相同
+                diffLines.add(new DiffLine(DiffType.EQUAL, i, i, baselineLine, currentLine));
             }
-            
-            // 添加相同的行
-            if (diffLine.type == DiffType.EQUAL) {
-                diffLines.add(diffLine);
-                baselineIndex++;
-                currentIndex++;
-            }
-        }
-        
-        // 添加剩余的行
-        while (baselineIndex < baselineLines.size()) {
-            diffLines.add(new DiffLine(DiffType.DELETE, baselineIndex, -1, baselineLines.get(baselineIndex), null));
-            baselineIndex++;
-        }
-        
-        while (currentIndex < currentLines.size()) {
-            diffLines.add(new DiffLine(DiffType.ADD, -1, currentIndex, null, currentLines.get(currentIndex)));
-            currentIndex++;
         }
         
         return diffLines;
@@ -299,30 +334,42 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
         return result;
     }
 
-    /**
+        /**
      * 生成差异项
      */
     private void generateDiffItems(List<DiffLine> diffLines, List<String> baselineLines, 
-                                 List<String> currentLines, CompareResultModel result) {
+                                  List<String> currentLines, CompareResultModel result) {
         
         for (DiffLine diffLine : diffLines) {
             switch (diffLine.type) {
                 case ADD:
+                    // 基线没有，当前有 - 新增
                     DiffItem addItem = DiffItem.createAdd("第" + (diffLine.currentIndex + 1) + "行", diffLine.currentValue);
                     addItem.setDiffLevel(getDiffLevel(diffLine.currentValue));
-                    addItem.setDiffCategory("行新增");
+                    addItem.setDiffCategory("配置新增");
                     addItem.setSuggestAction("确认新增配置是否正确");
                     addItem.setDiffPath("line_" + (diffLine.currentIndex + 1));
                     result.addDiffItem(addItem);
                     break;
                     
                 case DELETE:
+                    // 基线有，当前没有 - 缺失
                     DiffItem deleteItem = DiffItem.createDelete("第" + (diffLine.baselineIndex + 1) + "行", diffLine.baselineValue);
                     deleteItem.setDiffLevel(getDiffLevel(diffLine.baselineValue));
-                    deleteItem.setDiffCategory("行删除");
+                    deleteItem.setDiffCategory("配置缺失");
                     deleteItem.setSuggestAction("确认是否需要保留该配置");
                     deleteItem.setDiffPath("line_" + (diffLine.baselineIndex + 1));
                     result.addDiffItem(deleteItem);
+                    break;
+                    
+                case MODIFY:
+                    // 两行都有但内容不同 - 修改
+                    DiffItem modifyItem = DiffItem.createModify("第" + (diffLine.baselineIndex + 1) + "行", diffLine.baselineValue, diffLine.currentValue);
+                    modifyItem.setDiffLevel(getDiffLevel(diffLine.baselineValue));
+                    modifyItem.setDiffCategory("配置修改");
+                    modifyItem.setSuggestAction("确认配置修改是否正确");
+                    modifyItem.setDiffPath("line_" + (diffLine.baselineIndex + 1));
+                    result.addDiffItem(modifyItem);
                     break;
                     
                 case EQUAL:
@@ -440,6 +487,9 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
         }
         if (value instanceof String) {
             String str = (String) value;
+            if (str.trim().isEmpty()) {
+                return defaultValue; // 空字符串返回默认值
+            }
             if (str.contains(",")) {
                 return Arrays.asList(str.split(","));
             } else {
@@ -453,7 +503,7 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
      * 差异行类型枚举
      */
     private enum DiffType {
-        ADD, DELETE, EQUAL
+        ADD, DELETE, MODIFY, EQUAL
     }
 
     /**

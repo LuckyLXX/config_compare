@@ -123,6 +123,12 @@ public class ConfigCategoryServiceImpl extends ServiceImpl<ConfigCategoryMapper,
         queryWrapper.eq(ConfigCategory::getStatus, 1)
                    .orderByAsc(ConfigCategory::getSortOrder)
                    .orderByAsc(ConfigCategory::getCategoryName);
+        
+        // TODO: 这里需要根据系统ID进行过滤
+        // 目前暂时返回所有启用的配置分类
+        // 后续可以根据系统与配置分类的关联关系进行调整
+        log.info("根据系统ID获取配置分类，systemId: {}, 暂时返回所有启用的配置分类", systemId);
+        
         return this.list(queryWrapper);
     }
 

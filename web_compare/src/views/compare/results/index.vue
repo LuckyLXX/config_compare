@@ -370,9 +370,20 @@ export default {
         }
         delete params.executeTimeRange
         
+        // 确保taskId参数正确传递
+        if (searchForm.taskId) {
+          params.taskId = searchForm.taskId
+        }
+        
+        console.log('查询参数:', params)
+        
         const response = await compareResultApi.getResultList(params)
-        resultList.value = response.records || []
-        pagination.total = response.total || 0
+        resultList.value = response.data?.records || []
+        pagination.total = response.data?.total || 0
+        pagination.current = response.data?.current || 1
+        pagination.size = response.data?.size || 20
+        
+        console.log('查询结果:', resultList.value.length, '条记录')
       } catch (error) {
         console.error('获取结果列表失败:', error)
       } finally {
@@ -390,8 +401,13 @@ export default {
         }
         delete params.executeTimeRange
         
+        // 确保taskId参数正确传递
+        if (searchForm.taskId) {
+          params.taskId = searchForm.taskId
+        }
+        
         const response = await compareResultApi.getResultStatistics(params)
-        statistics.value = response || {}
+        statistics.value = response.data || {}
       } catch (error) {
         console.error('获取统计信息失败:', error)
       }
@@ -400,10 +416,13 @@ export default {
     // 获取系统列表
     const getSystemList = async () => {
       try {
-        const response = await systemApi.getSystemList()
-        systemList.value = response.records || []
+        const response = await systemApi.getAllSystemList()
+        // 后端返回的是直接的列表，不是分页格式
+        systemList.value = response.data || []
+        console.log('系统列表获取成功:', systemList.value.length, '个系统')
       } catch (error) {
         console.error('获取系统列表失败:', error)
+        systemList.value = []
       }
     }
     
@@ -452,7 +471,7 @@ export default {
         
         // 获取差异详情
         const response = await compareResultApi.getDiffDetails(row.id)
-        diffList.value = response.records || []
+        diffList.value = response.data?.records || []
         
         // 构建左右对比数据
         await buildSideBySideData(row)
@@ -468,22 +487,25 @@ export default {
     // 构建左右对比数据
     const buildSideBySideData = async (result) => {
       try {
-        // 获取基线内容和当前内容
-        const baselineContent = result.baselineContent || ''
-        const currentContent = result.currentContent || ''
-        
-        // 按行分割
-        baselineLines.value = baselineContent.split('\n')
-        currentLines.value = currentContent.split('\n')
-        
-        // 构建差异行映射
-        diffLineMap.value.clear()
-        diffList.value.forEach(diff => {
-          if (diff.diffPath && diff.diffPath.startsWith('line_')) {
-            const lineNum = parseInt(diff.diffPath.replace('line_', '')) - 1
-            diffLineMap.value.set(lineNum, diff)
-          }
-        })
+        // 从差异详情API获取基线内容和当前内容
+        const response = await compareResultApi.getDiffDetails(result.id)
+        if (response.data) {
+          const baselineContent = response.data.baselineContent || ''
+          const currentContent = response.data.currentContent || ''
+          
+          // 按行分割
+          baselineLines.value = baselineContent.split('\n')
+          currentLines.value = currentContent.split('\n')
+          
+          // 构建差异行映射
+          diffLineMap.value.clear()
+          diffList.value.forEach(diff => {
+            if (diff.diffPath && diff.diffPath.startsWith('line_')) {
+              const lineNum = parseInt(diff.diffPath.replace('line_', '')) - 1
+              diffLineMap.value.set(lineNum, diff)
+            }
+          })
+        }
       } catch (error) {
         console.error('构建左右对比数据失败:', error)
       }
@@ -584,7 +606,7 @@ export default {
     const getDiffTypeText = (type) => {
       const textMap = {
         'ADD': '新增',
-        'DELETE': '删除',
+        'DELETE': '缺失',
         'MODIFY': '修改'
       }
       return textMap[type] || '未知'

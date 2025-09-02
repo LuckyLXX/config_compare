@@ -465,7 +465,7 @@ export default {
     const fetchBasicData = async () => {
       try {
         // 获取系统列表
-        const systemResponse = await systemApi.getSystemList({ current: 1, size: 1000 })
+        const systemResponse = await systemApi.getAllSystemList()
         systemList.value = systemResponse.data?.records || []
 
         // 获取服务器类型列表
@@ -546,10 +546,22 @@ export default {
     }
 
     // 编辑基线
-    const handleEdit = (row) => {
+    const handleEdit = async (row) => {
       isEdit.value = true
       editDialogVisible.value = true
+      
+      // 确保基础数据已加载
+      if (systemList.value.length === 0 || serverTypeList.value.length === 0 || categoryList.value.length === 0) {
+        await fetchBasicData()
+      }
+      
+      // 设置表单数据
       Object.assign(form, row)
+      
+      console.log('编辑基线数据:', form)
+      console.log('系统列表:', systemList.value)
+      console.log('服务器类型列表:', serverTypeList.value)
+      console.log('配置分类列表:', categoryList.value)
     }
 
     // 复制基线
