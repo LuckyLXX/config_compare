@@ -75,7 +75,21 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="applicableServerTypes" label="适用服务器类型" width="150" show-overflow-tooltip />
+        <el-table-column label="适用服务器类型" min-width="200">
+          <template #default="{ row }">
+            <template v-if="getServerTypeNames(row.applicableServerTypes).length">
+              <el-tag
+                v-for="(name, idx) in getServerTypeNames(row.applicableServerTypes)"
+                :key="idx"
+                size="small"
+                style="margin-right: 6px"
+              >
+                {{ name }}
+              </el-tag>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
@@ -690,6 +704,7 @@ export default {
     const submitLoading = ref(false)
     const templateList = ref([])
     const serverTypeList = ref([])
+    const serverTypeMap = ref({})
     
     // 对话框状态
     const dialogVisible = ref(false)
@@ -905,11 +920,25 @@ export default {
       try {
         const response = await serverTypeApi.getServerTypeList()
         serverTypeList.value = response.data || response.records || []
+        // 构建ID->名称映射，便于列表展示
+        const map = {}
+        serverTypeList.value.forEach(t => { map[t.id] = t.typeName })
+        serverTypeMap.value = map
         console.log('服务器类型列表:', serverTypeList.value)
       } catch (error) {
         console.error('获取服务器类型列表失败:', error)
         ElMessage.error('获取服务器类型列表失败')
       }
+    }
+
+    // 将逗号分隔的ID字符串转换为名称数组
+    const getServerTypeNames = (ids) => {
+      if (!ids) return []
+      const arr = Array.isArray(ids) ? ids : String(ids).split(',')
+      return arr
+        .map(id => Number(id))
+        .filter(id => !!serverTypeMap.value[id])
+        .map(id => serverTypeMap.value[id])
     }
 
     // 获取测试服务器列表
@@ -1469,6 +1498,7 @@ export default {
       getConfigExample,
       useExample,
       getHelpTips,
+      getServerTypeNames,
       testConnection,
       closeTestResult,
       getTemplateTypeColor,

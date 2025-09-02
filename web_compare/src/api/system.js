@@ -2,12 +2,20 @@ import request from '@/utils/request'
 
 // 系统信息管理API
 export const systemApi = {
-  // 获取系统列表
+  // 获取系统列表（分页）
   getSystemList(params) {
     return request({
-      url: '/systems/list',
+      url: '/systems',
       method: 'get',
       params
+    })
+  },
+
+  // 获取所有系统列表（不分页）
+  getAllSystemList() {
+    return request({
+      url: '/systems/list',
+      method: 'get'
     })
   },
 

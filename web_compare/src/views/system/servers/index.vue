@@ -380,8 +380,19 @@ export default {
 
     const fetchSystemList = async () => {
       try {
-        const response = await systemApi.getSystemList({ current: 1, size: 1000 })
-        systemList.value = response.data?.records || []
+        // 优先调用不分页接口
+        const respAll = await systemApi.getAllSystemList()
+        const listAll = respAll?.data ?? respAll ?? []
+        let parsed = Array.isArray(listAll) ? listAll : (listAll.records || [])
+
+        // 如果仍为空，回退到分页接口取大页
+        if (!parsed || parsed.length === 0) {
+          const respPage = await systemApi.getSystemList({ current: 1, size: 1000 })
+          const pageData = respPage?.data ?? respPage ?? {}
+          parsed = pageData.records || []
+        }
+
+        systemList.value = parsed
       } catch (error) {
         console.error('获取系统列表失败:', error)
         systemList.value = []
@@ -391,7 +402,9 @@ export default {
     const fetchServerTypeList = async () => {
       try {
         const response = await serverTypeApi.getServerTypeList()
-        serverTypeList.value = response.data || []
+        // 兼容后端返回格式：可能是 {data: [...]} 或直接数组
+        const list = response?.data ?? response ?? []
+        serverTypeList.value = Array.isArray(list) ? list : (list.records || [])
       } catch (error) {
         console.error('获取服务器类型列表失败:', error)
         serverTypeList.value = []

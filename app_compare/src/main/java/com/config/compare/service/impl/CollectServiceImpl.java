@@ -1,5 +1,6 @@
 package com.config.compare.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.config.compare.collect.handler.CollectHandler;
 import com.config.compare.collect.manager.CollectHandlerManager;
 import com.config.compare.collect.model.CollectContext;
@@ -8,6 +9,8 @@ import com.config.compare.entity.*;
 import com.config.compare.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -36,6 +39,10 @@ public class CollectServiceImpl implements CollectService {
     private final CollectResultEntityService collectResultEntityService;
     private final ServerInstanceService serverInstanceService;
     private final CollectTemplateService collectTemplateService;
+
+    @Autowired
+    @Lazy
+    private CompareTaskService compareTaskService;
 
     // 执行线程池
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -358,6 +365,9 @@ public class CollectServiceImpl implements CollectService {
         } finally {
             // 完成执行记录
             finishExecutionRecord(executeId);
+
+            // 触发关联的比对任务（仅触发与该采集任务关联、启用且为触发执行的比对任务）
+            triggerRelatedCompareTasks(task.getId(), executeId, successCount, servers.size());
         }
     }
 
@@ -424,5 +434,43 @@ public class CollectServiceImpl implements CollectService {
             log.warn("解析模板内容失败: {}", e.getMessage());
         }
         return new HashMap<>();
+    }
+
+    /**
+     * 触发与指定采集任务关联的比对任务（execute_type=3 且 status=1）
+     * 说明：比对服务内部已改为只比对“最新一次采集”的结果，这里只负责触发一次执行。
+     */
+    private void triggerRelatedCompareTasks(Long collectTaskId, String executeId, int successCount, int totalCount) {
+        try {
+            if (successCount <= 0) {
+                log.info("本次采集全部失败，不触发比对。collectTaskId={} executeId={}", collectTaskId, executeId);
+                return;
+            }
+
+            LambdaQueryWrapper<CompareTask> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(CompareTask::getCollectTaskId, collectTaskId)
+                   .eq(CompareTask::getExecuteType, 3)
+                   .eq(CompareTask::getStatus, 1);
+
+            List<CompareTask> compareTasks = compareTaskService.list(wrapper);
+            if (compareTasks == null || compareTasks.isEmpty()) {
+                log.info("未找到需触发的比对任务。collectTaskId={} executeId={}", collectTaskId, executeId);
+                return;
+            }
+
+            log.info("触发{}个比对任务。collectTaskId={} executeId={} success/total={}/{}",
+                    compareTasks.size(), collectTaskId, executeId, successCount, totalCount);
+
+            for (CompareTask ct : compareTasks) {
+                try {
+                    String compareExecId = compareTaskService.executeTask(ct.getId());
+                    log.info("已触发比对任务：{}({}) -> compareExecuteId={}", ct.getTaskName(), ct.getId(), compareExecId);
+                } catch (Exception ex) {
+                    log.error("触发比对任务失败：{}({})", ct.getTaskName(), ct.getId(), ex);
+                }
+            }
+        } catch (Exception e) {
+            log.error("触发关联比对任务时异常。collectTaskId={} executeId={} ", collectTaskId, executeId, e);
+        }
     }
 }
