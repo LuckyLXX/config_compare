@@ -3,8 +3,11 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\co
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CompareTask.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\ServerTypeService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CompareTaskService.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CompareDiffDetail.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\compare\model\DiffItem.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\compare\model\CompareResultModel.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CompareResultMapper.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CompareResultService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CollectExecutionService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\SystemInfoServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\ScheduleController.java
@@ -16,6 +19,7 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\ma
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\ReportAnalysisController.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\ServerInstanceServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\CompareController.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\TaskSchedulerServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\ConfigBaselineServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CollectTypeExtensionService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\DashboardService.java
@@ -28,6 +32,7 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\en
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CollectResultEntity.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\DiffDetail.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\CollectTypeExtensionController.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CompareDiffDetailServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\ServerTypeServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CollectTaskMapper.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CollectServiceImpl.java
@@ -47,6 +52,7 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\co
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\apollo\service\impl\ApolloServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\apollo\model\ApolloConfig.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\DashboardController.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\TestController.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CompareRule.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\config\SwaggerConfig.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\ConfigCategoryMapper.java
@@ -54,13 +60,17 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\co
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CollectExecution.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CollectTypeExtension.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\ConfigCompareApplication.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CompareDiffDetailMapper.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\SystemInfoMapper.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CompareResultServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CollectService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\compare\algorithm\impl\TextCompareAlgorithm.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CollectResultEntityServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\apollo\model\ApolloNamespace.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\base\BaseEntity.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CompareExecutionService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CollectResultEntityMapper.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CompareExecutionMapper.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CollectTask.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\BaselineVersionLog.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\ConfigBaselineController.java
@@ -69,7 +79,6 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\se
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CollectTypeExtensionServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CollectExecutionServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CollectTaskServiceImpl.java
-D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\SshTextCompareServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CompareTaskServiceImpl.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\ReportExecutionController.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CollectTemplateService.java
@@ -84,11 +93,11 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\ut
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\compare\algorithm\impl\JsonCompareAlgorithm.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\collect\model\CollectResult.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\config\RestTemplateConfig.java
-D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\SshTextCompareService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\ConfigBaselineService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\collect\handler\ApiCollectHandler.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\compare\manager\CompareAlgorithmManager.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\config\GlobalExceptionHandler.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\TaskSchedulerService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CompareTaskMapper.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\apollo\service\ApolloService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CollectTypeExtensionMapper.java
@@ -99,7 +108,9 @@ D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\co
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CollectExecutionMapper.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\SystemInfo.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\ServerType.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\CompareDiffDetailService.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\ReportDashboardController.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\mapper\CollectTemplateMapper.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\entity\CompareExecution.java
 D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\controller\ReportStatisticsController.java
+D:\workspace\工作\config_compare\app_compare\src\main\java\com\config\compare\service\impl\CompareExecutionServiceImpl.java

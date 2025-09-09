@@ -1,28 +1,25 @@
 package com.config.compare.apollo.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.http.HttpException;
-import cn.hutool.json.JSONArray;
+import cn.hutool.http.HttpRequest;
+import cn.hutool.http.HttpResponse;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.config.compare.apollo.model.ApolloConfig;
-import com.config.compare.apollo.model.ApolloConfigItem;
-import com.config.compare.apollo.model.ApolloNamespace;
 import com.config.compare.apollo.service.ApolloService;
+import com.config.compare.apollo.util.ApolloSignatureUtil;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Apollo服务实现类
+ * Apollo服务实现类 - 简化版，直接使用HTTP请求
  * 
  * @author system
- * @version 1.0.0
+ * @version 2.0.0
  * @since 2025-01-25
  */
 @Slf4j
@@ -32,189 +29,138 @@ public class ApolloServiceImpl implements ApolloService {
     @Override
     public boolean testConnection(ApolloConfig config) {
         try {
-            // 尝试获取应用信息来测试连接
-            String url = buildUrl(config, "/openapi/v1/apps/" + config.getAppId());
-            String response = doGetRequest(config, url);
-            return StrUtil.isNotBlank(response);
+            // 使用application命名空间测试连接
+            String testUrl = buildConfigUrl(config, "application");
+            log.info("测试Apollo连接: {}", testUrl);
+            
+            HttpResponse response = createAuthenticatedRequest(testUrl, config).execute();
+            
+            boolean success = response.isOk();
+            log.info("Apollo连接测试结果: {}, 状态码: {}", success ? "成功" : "失败", response.getStatus());
+            
+            return success;
         } catch (Exception e) {
-            log.warn("Apollo连接测试失败: {}", e.getMessage());
+            log.error("Apollo连接测试失败: {}", e.getMessage());
             return false;
         }
     }
 
     @Override
-    public List<String> getNamespaces(ApolloConfig config) {
+    public Map<String, String> getNamespaceConfigs(ApolloConfig config, String namespace) {
         try {
-            String url = buildUrl(config, String.format("/openapi/v1/envs/%s/apps/%s/clusters/%s/namespaces",
-                    config.getEnv(), config.getAppId(), config.getCluster()));
-            String response = doGetRequest(config, url);
+            String url = buildConfigUrl(config, namespace);
+            log.info("获取Apollo配置: {}", url);
             
-            List<String> namespaces = new ArrayList<>();
-            JSONArray jsonArray = JSONUtil.parseArray(response);
-            for (Object item : jsonArray) {
-                JSONObject namespace = (JSONObject) item;
-                namespaces.add(namespace.getStr("namespaceName"));
+            HttpResponse response = createAuthenticatedRequest(url, config).execute();
+            
+            if (!response.isOk()) {
+                log.error("获取Apollo配置失败，状态码: {}, 响应: {}", response.getStatus(), response.body());
+                throw new RuntimeException("获取Apollo配置失败，状态码: " + response.getStatus());
             }
             
-            return namespaces;
+            String responseBody = response.body();
+            log.debug("Apollo响应内容: {}", responseBody);
+            
+            // 解析响应JSON
+            JSONObject jsonResponse = JSONUtil.parseObj(responseBody);
+            Map<String, String> configs = new HashMap<>();
+            
+            // 检查是否有configurations字段
+            if (jsonResponse.containsKey("configurations")) {
+                JSONObject configurations = jsonResponse.getJSONObject("configurations");
+                for (String key : configurations.keySet()) {
+                    configs.put(key, configurations.getStr(key));
+                }
+            } else {
+                // 直接解析为配置项（某些Apollo版本的响应格式）
+                for (String key : jsonResponse.keySet()) {
+                    // 跳过元数据字段
+                    if (!"appId".equals(key) && !"cluster".equals(key) && !"namespaceName".equals(key) 
+                        && !"releaseKey".equals(key)) {
+                        configs.put(key, jsonResponse.getStr(key));
+                    }
+                }
+            }
+            
+            log.info("成功获取命名空间 {} 的 {} 个配置项", namespace, configs.size());
+            return configs;
+            
         } catch (Exception e) {
-            log.error("获取Apollo命名空间列表失败: {}", e.getMessage());
-            throw new RuntimeException("获取Apollo命名空间列表失败: " + e.getMessage());
+            log.error("获取Apollo命名空间 {} 配置失败: {}", namespace, e.getMessage());
+            throw new RuntimeException("获取Apollo配置失败: " + e.getMessage());
         }
     }
 
     @Override
-    public ApolloNamespace getNamespaceConfigs(ApolloConfig config, String namespace) {
-        try {
-            // 获取命名空间配置项
-            String itemsUrl = buildUrl(config, String.format("/openapi/v1/envs/%s/apps/%s/clusters/%s/namespaces/%s/items",
-                    config.getEnv(), config.getAppId(), config.getCluster(), namespace));
-            String itemsResponse = doGetRequest(config, itemsUrl);
-
-            ApolloNamespace apolloNamespace = new ApolloNamespace();
-            apolloNamespace.setAppId(config.getAppId());
-            apolloNamespace.setClusterName(config.getCluster());
-            apolloNamespace.setNamespaceName(namespace);
-
-            // 解析配置项
-            List<ApolloConfigItem> items = new ArrayList<>();
-            JSONArray jsonArray = JSONUtil.parseArray(itemsResponse);
-            for (Object item : jsonArray) {
-                JSONObject configItem = (JSONObject) item;
-                
-                ApolloConfigItem apolloItem = new ApolloConfigItem();
-                apolloItem.setKey(configItem.getStr("key"));
-                apolloItem.setValue(configItem.getStr("value"));
-                apolloItem.setComment(configItem.getStr("comment"));
-                apolloItem.setDataChangeLastModifiedTime(configItem.getStr("dataChangeLastModifiedTime"));
-                apolloItem.setDataChangeLastModifiedBy(configItem.getStr("dataChangeLastModifiedBy"));
-                apolloItem.setDataChangeCreatedTime(configItem.getStr("dataChangeCreatedTime"));
-                apolloItem.setDataChangeCreatedBy(configItem.getStr("dataChangeCreatedBy"));
-                
-                items.add(apolloItem);
-            }
-            apolloNamespace.setItems(items);
-
-            // 尝试获取发布信息
-            try {
-                String releaseUrl = buildUrl(config, String.format("/openapi/v1/envs/%s/apps/%s/clusters/%s/namespaces/%s/releases/latest",
-                        config.getEnv(), config.getAppId(), config.getCluster(), namespace));
-                String releaseResponse = doGetRequest(config, releaseUrl);
-                
-                JSONObject releaseInfo = JSONUtil.parseObj(releaseResponse);
-                apolloNamespace.setReleaseKey(releaseInfo.getStr("releaseKey"));
-                apolloNamespace.setReleaseTitle(releaseInfo.getStr("name"));
-                apolloNamespace.setReleaseComment(releaseInfo.getStr("comment"));
-            } catch (Exception e) {
-                log.warn("获取命名空间 {} 发布信息失败: {}", namespace, e.getMessage());
-            }
-
-            return apolloNamespace;
-        } catch (Exception e) {
-            log.error("获取Apollo命名空间配置失败: {}", e.getMessage());
-            throw new RuntimeException("获取Apollo命名空间配置失败: " + e.getMessage());
+    public Map<String, Map<String, String>> getAllConfigs(ApolloConfig config) {
+        Map<String, Map<String, String>> allConfigs = new HashMap<>();
+        
+        // 如果没有指定命名空间，默认使用application
+        if (config.getNamespaces() == null || config.getNamespaces().isEmpty()) {
+            config.setNamespaces(java.util.List.of("application"));
         }
-    }
-
-    @Override
-    public String getPublishedConfigs(ApolloConfig config, String namespace) {
-        try {
-            String url = buildUrl(config, String.format("/openapi/v1/envs/%s/apps/%s/clusters/%s/namespaces/%s/releases/latest",
-                    config.getEnv(), config.getAppId(), config.getCluster(), namespace));
-            String response = doGetRequest(config, url);
-            
-            JSONObject releaseInfo = JSONUtil.parseObj(response);
-            return releaseInfo.getStr("configurations");
-        } catch (Exception e) {
-            log.error("获取Apollo发布配置失败: {}", e.getMessage());
-            throw new RuntimeException("获取Apollo发布配置失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public List<ApolloNamespace> previewConfigs(ApolloConfig config) {
-        List<ApolloNamespace> result = new ArrayList<>();
         
         for (String namespace : config.getNamespaces()) {
             try {
-                ApolloNamespace namespaceData = getNamespaceConfigs(config, namespace);
-                result.add(namespaceData);
+                Map<String, String> namespaceConfigs = getNamespaceConfigs(config, namespace);
+                allConfigs.put(namespace, namespaceConfigs);
             } catch (Exception e) {
-                log.error("预览命名空间 {} 配置失败: {}", namespace, e.getMessage());
-                // 创建一个错误的命名空间对象
-                ApolloNamespace errorNamespace = new ApolloNamespace();
-                errorNamespace.setAppId(config.getAppId());
-                errorNamespace.setClusterName(config.getCluster());
-                errorNamespace.setNamespaceName(namespace);
-                
-                // 添加错误信息作为配置项
-                ApolloConfigItem errorItem = new ApolloConfigItem();
-                errorItem.setKey("ERROR");
-                errorItem.setValue(e.getMessage());
-                errorNamespace.setItems(List.of(errorItem));
-                
-                result.add(errorNamespace);
+                log.error("获取命名空间 {} 配置失败: {}", namespace, e.getMessage());
+                // 记录错误信息
+                Map<String, String> errorInfo = new HashMap<>();
+                errorInfo.put("error", e.getMessage());
+                allConfigs.put(namespace, errorInfo);
             }
         }
         
-        return result;
+        return allConfigs;
     }
 
     /**
-     * 构建请求URL
+     * 构建配置获取URL
+     * URL格式: http://config-service:8080/configs/{appId}/{cluster}/{namespace}
      */
-    private String buildUrl(ApolloConfig config, String path) {
-        String baseUrl = config.getServerUrl();
-        if (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+    private String buildConfigUrl(ApolloConfig config, String namespace) {
+        String baseUrl = config.getConfigServiceUrl();
+        
+        // 确保URL以/结尾
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
         }
-        return baseUrl + path;
+        
+        // 构建完整URL
+        return String.format("%sconfigs/%s/%s/%s", 
+                baseUrl, 
+                config.getAppId(), 
+                config.getCluster(), 
+                namespace);
     }
-
+    
     /**
-     * 执行GET请求
+     * 创建带认证的HTTP请求
      */
-    private String doGetRequest(ApolloConfig config, String url) throws IOException {
-        OkHttpClient client = buildHttpClient(config);
+    private HttpRequest createAuthenticatedRequest(String url, ApolloConfig config) {
+        HttpRequest request = HttpRequest.get(url)
+                .timeout(config.getConnectTimeout());
         
-        Request.Builder requestBuilder = new Request.Builder().url(url);
-        
-        // 添加认证头
-        if (StrUtil.isNotBlank(config.getToken())) {
-            requestBuilder.addHeader("Authorization", config.getToken());
-        }
-        
-        Request request = requestBuilder.build();
-        
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new HttpException("Apollo请求失败: " + response.code() + " " + response.message());
+        // 如果配置了密钥，添加签名认证头部
+        if (StringUtils.hasText(config.getSecret())) {
+            try {
+                Map<String, String> authHeaders = ApolloSignatureUtil.buildHttpHeaders(url, config.getAppId(), config.getSecret());
+                log.info("Apollo认证头部信息:");
+                for (Map.Entry<String, String> header : authHeaders.entrySet()) {
+                    request.header(header.getKey(), header.getValue());
+                    log.info("  {}: {}", header.getKey(), header.getValue());
+                }
+                log.info("已添加Apollo签名认证头部，AppId: {}, Secret: {}***", config.getAppId(), 
+                    config.getSecret().length() > 3 ? config.getSecret().substring(0, 3) : "***");
+            } catch (Exception e) {
+                log.error("添加Apollo签名认证失败: {}", e.getMessage(), e);
             }
-            
-            ResponseBody responseBody = response.body();
-            if (responseBody == null) {
-                throw new HttpException("Apollo响应体为空");
-            }
-            
-            return responseBody.string();
+        } else {
+            log.info("未配置Apollo密钥，使用无认证请求");
         }
-    }
-
-    /**
-     * 构建HTTP客户端
-     */
-    private OkHttpClient buildHttpClient(ApolloConfig config) {
-        OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                .connectTimeout(config.getConnectTimeout() != null ? config.getConnectTimeout() : 5000, TimeUnit.MILLISECONDS)
-                .readTimeout(config.getReadTimeout() != null ? config.getReadTimeout() : 10000, TimeUnit.MILLISECONDS)
-                .writeTimeout(10000, TimeUnit.MILLISECONDS);
-
-        // SSL配置
-        if (config.getEnableSsl() != null && !config.getEnableSsl()) {
-            // 如果禁用SSL验证，这里可以添加相应的配置
-            // 注意：生产环境不建议禁用SSL验证
-        }
-
-        return builder.build();
+        
+        return request;
     }
 }

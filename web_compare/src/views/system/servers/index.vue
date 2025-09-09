@@ -116,6 +116,13 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="status" label="状态" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+              {{ row.status === 1 ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="connectStatus" label="连接状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.connectStatus === 1 ? 'success' : 'danger'" size="small">
@@ -257,6 +264,12 @@
             <el-option label="备用服务器" value="BACKUP" />
           </el-select>
         </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-radio-group v-model="serverForm.status">
+            <el-radio :label="1">启用</el-radio>
+            <el-radio :label="0">禁用</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="描述">
           <el-input
             v-model="serverForm.description"
@@ -334,6 +347,7 @@ export default {
       username: '',
       password: '',
       serverRole: '',
+      status: 1,
       description: ''
     })
 
@@ -614,6 +628,7 @@ export default {
         username: '',
         password: '',
         serverRole: '',
+        status: 1,
         description: ''
       })
     }

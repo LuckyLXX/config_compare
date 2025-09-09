@@ -443,12 +443,11 @@
                   <el-row :gutter="20">
                     <el-col :span="8">
                       <el-form-item label="环境" required>
-                        <el-select v-model="apolloConfig.env" style="width: 100%">
-                          <el-option label="开发环境(DEV)" value="DEV" />
-                          <el-option label="测试环境(FAT)" value="FAT" />
-                          <el-option label="预生产(UAT)" value="UAT" />
-                          <el-option label="生产环境(PROD)" value="PROD" />
-                        </el-select>
+                        <el-input 
+                          v-model="apolloConfig.env" 
+                          placeholder="例如: DEV, TEST, UAT, PROD"
+                          clearable
+                        />
                       </el-form-item>
                     </el-col>
                     <el-col :span="8">
@@ -762,7 +761,7 @@ export default {
     const apolloConfig = reactive({
       serverUrl: '',
       appId: '',
-      env: 'PROD',
+      env: '',
       cluster: 'default',
       namespaces: '',
       token: ''
@@ -817,7 +816,7 @@ export default {
       APOLLO: {
         serverUrl: 'http://apollo.example.com:8080',
         appId: 'my-app',
-        env: 'PROD',
+        env: 'DEV',
         cluster: 'default',
         namespaces: 'application,database,redis',
         token: 'your-access-token'
@@ -1034,9 +1033,12 @@ export default {
                 break
               case 'APOLLO':
                 Object.assign(apolloConfig, {
+                  serverUrl: config.serverUrl || '',
                   appId: config.appId || '',
+                  env: config.env || '',
                   cluster: config.cluster || 'default',
-                  namespaces: config.namespaces || ['application']
+                  namespaces: Array.isArray(config.namespaces) ? config.namespaces.join(',') : (config.namespaces || ''),
+                  token: config.token || ''
                 })
                 break
             }
@@ -1219,7 +1221,7 @@ export default {
       Object.assign(apolloConfig, {
         serverUrl: '',
         appId: '',
-        env: 'PROD',
+        env: '',
         cluster: 'default',
         namespaces: '',
         token: ''
@@ -1369,11 +1371,9 @@ export default {
           serverId: testServerId.value
         }
         
-        // 如果是新建模板或者要测试当前配置，传递动态配置参数
-        if (!form.id) {
-          requestData.templateType = form.templateType
-          requestData.config = JSON.stringify(config)
-        }
+        // 始终传递动态配置参数，以便使用实时输入的配置进行测试
+        requestData.templateType = form.templateType
+        requestData.config = JSON.stringify(config)
         
         const response = await collectTemplateApi.testTemplateConnection({
           templateId: form.id || 0, // 新建模板时ID为空，传0表示测试配置

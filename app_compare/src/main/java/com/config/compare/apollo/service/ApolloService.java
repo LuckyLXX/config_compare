@@ -1,14 +1,13 @@
 package com.config.compare.apollo.service;
 
 import com.config.compare.apollo.model.ApolloConfig;
-import com.config.compare.apollo.model.ApolloNamespace;
-import java.util.List;
+import java.util.Map;
 
 /**
- * Apollo服务接口
+ * Apollo服务接口 - 简化版
  * 
  * @author system
- * @version 1.0.0
+ * @version 2.0.0
  * @since 2025-01-25
  */
 public interface ApolloService {
@@ -22,36 +21,19 @@ public interface ApolloService {
     boolean testConnection(ApolloConfig config);
 
     /**
-     * 获取应用的所有命名空间
-     * 
-     * @param config Apollo配置
-     * @return 命名空间列表
-     */
-    List<String> getNamespaces(ApolloConfig config);
-
-    /**
      * 获取指定命名空间的配置
      * 
      * @param config Apollo配置
      * @param namespace 命名空间
-     * @return 命名空间配置
+     * @return 配置键值对
      */
-    ApolloNamespace getNamespaceConfigs(ApolloConfig config, String namespace);
+    Map<String, String> getNamespaceConfigs(ApolloConfig config, String namespace);
 
     /**
-     * 获取指定命名空间的发布配置
+     * 获取所有命名空间的配置
      * 
      * @param config Apollo配置
-     * @param namespace 命名空间
-     * @return 发布的配置内容
+     * @return 所有配置
      */
-    String getPublishedConfigs(ApolloConfig config, String namespace);
-
-    /**
-     * 预览Apollo采集结果
-     * 
-     * @param config Apollo配置
-     * @return 预览结果
-     */
-    List<ApolloNamespace> previewConfigs(ApolloConfig config);
+    Map<String, Map<String, String>> getAllConfigs(ApolloConfig config);
 }

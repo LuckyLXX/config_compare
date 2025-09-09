@@ -465,20 +465,30 @@ export default {
     const fetchBasicData = async () => {
       try {
         // 获取系统列表
+        console.log('开始获取系统列表...')
         const systemResponse = await systemApi.getAllSystemList()
-        systemList.value = systemResponse.data?.records || []
+        console.log('系统列表响应:', systemResponse)
+        // 后端返回格式: Result.success("查询成功", result)，数据在data字段中
+        systemList.value = systemResponse.data || []
+        console.log('解析后的系统列表:', systemList.value)
 
         // 获取服务器类型列表
+        console.log('开始获取服务器类型列表...')
         const serverTypeResponse = await serverTypeApi.getServerTypeList()
+        console.log('服务器类型响应:', serverTypeResponse)
         serverTypeList.value = serverTypeResponse.data || []
+        console.log('解析后的服务器类型列表:', serverTypeList.value)
 
         // 获取配置分类列表
+        console.log('开始获取配置分类列表...')
         const categoryResponse = await categoryApi.getCategoryList()
+        console.log('配置分类响应:', categoryResponse)
         categoryList.value = categoryResponse.data || []
+        console.log('解析后的配置分类列表:', categoryList.value)
         
       } catch (error) {
         console.error('获取基础数据失败:', error)
-        ElMessage.error('获取基础数据失败')
+        ElMessage.error('获取基础数据失败: ' + (error.message || '未知错误'))
       }
     }
 

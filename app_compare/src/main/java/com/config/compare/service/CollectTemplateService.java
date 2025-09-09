@@ -4,6 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+
+import com.config.compare.collect.model.CollectContext;
+import com.config.compare.collect.model.CollectResult;
+import com.config.compare.apollo.model.ApolloConfig;
+import com.config.compare.apollo.service.ApolloService;
 import com.config.compare.entity.CollectTemplate;
 import com.config.compare.entity.ServerInstance;
 import com.config.compare.mapper.CollectTemplateMapper;
@@ -14,8 +19,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 采集模板服务实现类
@@ -30,6 +37,7 @@ import java.util.Map;
 public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, CollectTemplate> {
 
     private final ServerInstanceMapper serverInstanceMapper;
+    private final ApolloService apolloService;
 
     /**
      * 分页查询采集模板列表
@@ -264,33 +272,32 @@ public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, C
         }
     }
 
+
+    
+
+    
     /**
-     * 测试Apollo配置模板
+     * 获取配置值的辅助方法
      */
-    private Map<String, Object> testApolloTemplate(String templateContent, ServerInstance server) {
-        try {
-            // TODO: 实现Apollo配置中心连接测试
-            // 这里应该解析templateContent中的serverUrl、appId、env等参数
-            // 连接Apollo服务并获取配置信息
-            
-            return Map.of(
-                "success", true,
-                "message", "Apollo配置测试成功",
-                "testResult", "成功连接Apollo配置中心",
-                "configInfo", Map.of(
-                    "namespaces", List.of("application", "database", "redis"),
-                    "configCount", 15,
-                    "lastReleaseTime", "2025-01-25 09:45:00"
-                )
-            );
-        } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "message", "Apollo配置测试失败：" + e.getMessage(),
-                "error", e.getClass().getSimpleName()
-            );
+    private String getConfigValue(Map<String, Object> configMap, String key, String defaultValue) {
+        if (configMap != null && configMap.containsKey(key)) {
+            Object value = configMap.get(key);
+            if (value != null && StringUtils.hasText(value.toString())) {
+                return value.toString();
+            }
         }
+        return defaultValue;
     }
+    
+    /**
+     * 获取配置值的辅助方法（带备用默认值）
+     */
+    private String getConfigValue(Map<String, Object> configMap, String key, String primaryDefault, String secondaryDefault) {
+        String value = getConfigValue(configMap, key, primaryDefault);
+        return StringUtils.hasText(value) ? value : secondaryDefault;
+    }
+    
+
 
     /**
      * 从模板内容中解析命令
@@ -316,6 +323,173 @@ public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, C
         
         // 默认测试命令
         return "echo '这是一个SSH连接测试' && date && whoami && pwd";
+    }
+
+    /**
+     * 测试Apollo配置模板
+     */
+    private Map<String, Object> testApolloTemplate(String templateContent, ServerInstance server) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            log.info("开始Apollo配置测试，服务器: {}", server.getInstanceName());
+            
+            // 构建Apollo配置
+            ApolloConfig apolloConfig = buildApolloConfig(templateContent, server);
+            
+            // 测试连接
+            boolean connectionOk = apolloService.testConnection(apolloConfig);
+            if (!connectionOk) {
+                return Map.of(
+                    "success", false,
+                    "message", "Apollo服务器连接失败",
+                    "error", "ConnectionFailed",
+                    "executionTime", System.currentTimeMillis() - startTime,
+                    "configInfo", Map.of(
+                        "configServiceUrl", apolloConfig.getConfigServiceUrl(),
+                        "appId", apolloConfig.getAppId(),
+                        "cluster", apolloConfig.getCluster(),
+                        "namespaces", apolloConfig.getNamespaces()
+                    )
+                );
+            }
+            
+            // 获取所有配置
+            Map<String, Map<String, String>> allConfigs = apolloService.getAllConfigs(apolloConfig);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            
+            // 格式化配置数据用于预览
+            String configPreview;
+            try {
+                configPreview = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(allConfigs);
+            } catch (Exception e) {
+                configPreview = allConfigs.toString();
+            }
+            
+            int totalConfigCount = allConfigs.values().stream()
+                .mapToInt(Map::size)
+                .sum();
+            
+            log.info("Apollo配置测试成功，总配置项数: {}, 耗时: {}ms", totalConfigCount, executionTime);
+            
+            return Map.of(
+                "success", true,
+                "message", "Apollo配置测试成功",
+                "testResult", configPreview,
+                "executionTime", executionTime,
+                "configInfo", Map.of(
+                    "configServiceUrl", apolloConfig.getConfigServiceUrl(),
+                    "appId", apolloConfig.getAppId(),
+                    "cluster", apolloConfig.getCluster(),
+                    "namespaces", apolloConfig.getNamespaces(),
+                    "totalConfigCount", totalConfigCount,
+                    "successNamespaces", allConfigs.size()
+                )
+            );
+            
+        } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            log.error("Apollo配置测试失败", e);
+            return Map.of(
+                "success", false,
+                "message", "Apollo配置测试失败：" + e.getMessage(),
+                "error", e.getClass().getSimpleName(),
+                "executionTime", executionTime,
+                "testResult", "错误详情: " + e.getMessage()
+            );
+        }
+    }
+    
+    /**
+     * 构建Apollo配置
+     */
+    private ApolloConfig buildApolloConfig(String templateContent, ServerInstance server) {
+        ApolloConfig config = new ApolloConfig();
+        
+        try {
+            log.info("构建Apollo配置 - 模板内容: {}", templateContent);
+            log.info("服务器实例Apollo信息 - serverUrl: {}, appId: {}, cluster: {}, namespaces: {}", 
+                server.getApolloServerUrl(), server.getApolloAppId(), server.getApolloCluster(), server.getApolloNamespaces());
+            
+            if (StringUtils.hasText(templateContent) && templateContent.trim().startsWith("{")) {
+                // 解析JSON格式的配置
+                Map<String, Object> configMap = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(templateContent, Map.class);
+                
+                log.info("解析到的JSON配置: {}", configMap);
+                
+                // 设置配置服务地址 - 支持configServiceUrl和serverUrl两种字段名
+                String configServiceUrl = getConfigValue(configMap, "configServiceUrl", null);
+                if (configServiceUrl == null) {
+                    configServiceUrl = getConfigValue(configMap, "serverUrl", server.getApolloServerUrl());
+                }
+                config.setConfigServiceUrl(configServiceUrl);
+                config.setAppId(getConfigValue(configMap, "appId", server.getApolloAppId()));
+                config.setCluster(getConfigValue(configMap, "cluster", server.getApolloCluster(), "default"));
+                
+                // 解析命名空间
+                String namespacesStr = getConfigValue(configMap, "namespaces", server.getApolloNamespaces());
+                if (StringUtils.hasText(namespacesStr)) {
+                    List<String> namespaces = List.of(namespacesStr.split(","));
+                    config.setNamespaces(namespaces.stream().map(String::trim).collect(Collectors.toList()));
+                }
+                
+                // 设置密钥（用于签名认证）- 支持token和secret两种字段名
+                String secret = getConfigValue(configMap, "secret", null);
+                if (secret == null) {
+                    secret = getConfigValue(configMap, "token", null);
+                }
+                config.setSecret(secret);
+                
+                // 设置超时参数
+                if (configMap.containsKey("connectTimeout")) {
+                    config.setConnectTimeout(Integer.valueOf(configMap.get("connectTimeout").toString()));
+                }
+                if (configMap.containsKey("readTimeout")) {
+                    config.setReadTimeout(Integer.valueOf(configMap.get("readTimeout").toString()));
+                }
+                
+            } else {
+                // 使用服务器实例的Apollo配置
+                config.setConfigServiceUrl(server.getApolloServerUrl());
+                config.setAppId(server.getApolloAppId());
+                config.setCluster(server.getApolloCluster() != null ? server.getApolloCluster() : "default");
+                
+                if (StringUtils.hasText(server.getApolloNamespaces())) {
+                    List<String> namespaces = List.of(server.getApolloNamespaces().split(","));
+                    config.setNamespaces(namespaces.stream().map(String::trim).collect(Collectors.toList()));
+                }
+            }
+            
+            // 设置默认值（如果配置为空）
+            if (!StringUtils.hasText(config.getConfigServiceUrl())) {
+                // 尝试从模板内容或使用默认测试地址
+                config.setConfigServiceUrl("http://81.68.181.139:8080");
+                log.warn("Apollo Config Service地址为空，使用默认测试地址: {}", config.getConfigServiceUrl());
+            }
+            
+            if (!StringUtils.hasText(config.getAppId())) {
+                config.setAppId("001010101");
+                log.warn("Apollo应用标识为空，使用默认测试AppId: {}", config.getAppId());
+            }
+            
+            if (config.getNamespaces() == null || config.getNamespaces().isEmpty()) {
+                config.setNamespaces(List.of("application"));
+                log.warn("Apollo命名空间列表为空，使用默认命名空间: {}", config.getNamespaces());
+            }
+            
+            log.info("最终构建的Apollo配置 - configServiceUrl: {}, appId: {}, cluster: {}, namespaces: {}", 
+                config.getConfigServiceUrl(), config.getAppId(), config.getCluster(), config.getNamespaces());
+            
+            return config;
+            
+        } catch (Exception e) {
+            log.error("构建Apollo配置失败", e);
+            throw new RuntimeException("Apollo配置构建失败：" + e.getMessage());
+        }
     }
 
 }
