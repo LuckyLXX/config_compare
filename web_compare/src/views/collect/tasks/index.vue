@@ -717,11 +717,70 @@ export default {
     
     const handleExecute = async (row) => {
       try {
-        await collectTaskApi.executeTask(row.id)
+        // 获取任务详情，检查是否为Apollo类型且配置完整
+        const taskResponse = await collectTaskApi.getTaskById(row.id)
+        const taskData = taskResponse.data || taskResponse
+        
+        // 获取模板信息，检查Apollo配置
+        const templateResponse = await collectTemplateApi.getTemplateById(taskData.templateId)
+        const templateData = templateResponse.data || templateResponse
+        
+        if (templateData.templateType === 'APOLLO') {
+          let templateConfig = {}
+          try {
+            templateConfig = JSON.parse(templateData.templateContent || '{}')
+          } catch (e) {
+            console.warn('解析模板配置失败:', e)
+          }
+          
+          // 检查必需的Apollo配置
+          const hasServerUrl = templateConfig.configServiceUrl || templateConfig.serverUrl
+          const hasAppId = templateConfig.appId
+          const hasNamespaces = templateConfig.namespaces
+          
+          if (!hasServerUrl || !hasAppId || !hasNamespaces) {
+            ElMessageBox.confirm(
+              'Apollo采集模板配置不完整，可能导致采集失败。建议：\n' +
+              '1. 检查模板中的Apollo服务器地址、应用ID、命名空间是否配置完整\n' +
+              '2. 确保目标服务器实例已配置Apollo相关参数\n\n' +
+              '是否继续执行？',
+              'Apollo配置不完整',
+              {
+                confirmButtonText: '继续执行',
+                cancelButtonText: '取消',
+                type: 'warning',
+                dangerouslyUseHTMLString: true
+              }
+            ).then(() => {
+              // 用户选择继续执行
+              return executeTask(row.id)
+            }).catch(() => {
+              // 用户选择取消
+              ElMessage.info('已取消执行')
+            })
+          } else {
+            // 配置完整，直接执行
+            await executeTask(row.id)
+          }
+        } else {
+          // 非Apollo类型，直接执行
+          await executeTask(row.id)
+        }
+      } catch (error) {
+        console.error('检查任务配置失败:', error)
+        // 如果检查失败，仍然尝试执行，让后端处理错误
+        await executeTask(row.id)
+      }
+    }
+    
+    const executeTask = async (taskId) => {
+      try {
+        await collectTaskApi.executeTask(taskId)
         ElMessage.success('任务已开始执行')
         getTaskList()
       } catch (error) {
         console.error('执行任务失败:', error)
+        ElMessage.error('执行任务失败：' + (error.message || '未知错误'))
       }
     }
     

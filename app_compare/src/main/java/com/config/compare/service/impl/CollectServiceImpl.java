@@ -335,6 +335,48 @@ public class CollectServiceImpl implements CollectService {
                     
                     // 解析模板配置参数
                     Map<String, Object> configParams = parseTemplateContent(template.getTemplateContent());
+                    
+                    // 对于Apollo类型，确保配置完整性
+                    if ("APOLLO".equals(template.getTemplateType())) {
+                        log.info("处理Apollo采集任务 - 服务器: {}, 原始配置: {}", server.getInstanceName(), configParams);
+                        
+                        // 如果模板配置不完整，尝试从服务器实例获取
+                        if (configParams == null) {
+                            configParams = new HashMap<>();
+                        }
+                        
+                        // 确保必需的Apollo配置参数存在
+                        if (!configParams.containsKey("configServiceUrl") && !configParams.containsKey("serverUrl")) {
+                            if (server.getApolloServerUrl() != null) {
+                                configParams.put("configServiceUrl", server.getApolloServerUrl());
+                                log.info("从服务器实例获取Apollo服务器地址: {}", server.getApolloServerUrl());
+                            }
+                        }
+                        
+                        if (!configParams.containsKey("appId")) {
+                            if (server.getApolloAppId() != null) {
+                                configParams.put("appId", server.getApolloAppId());
+                                log.info("从服务器实例获取Apollo应用ID: {}", server.getApolloAppId());
+                            }
+                        }
+                        
+                        if (!configParams.containsKey("cluster")) {
+                            if (server.getApolloCluster() != null) {
+                                configParams.put("cluster", server.getApolloCluster());
+                                log.info("从服务器实例获取Apollo集群: {}", server.getApolloCluster());
+                            }
+                        }
+                        
+                        if (!configParams.containsKey("namespaces")) {
+                            if (server.getApolloNamespaces() != null) {
+                                configParams.put("namespaces", server.getApolloNamespaces());
+                                log.info("从服务器实例获取Apollo命名空间: {}", server.getApolloNamespaces());
+                            }
+                        }
+                        
+                        log.info("合并后的Apollo配置: {}", configParams);
+                    }
+                    
                     context.setConfigParams(configParams);
                     
                     CollectResult result = executeSingleCollect(context);

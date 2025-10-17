@@ -12,3 +12,13 @@ DESCRIBE compare_task;
 UPDATE compare_task SET update_by = 'system' WHERE update_by IS NULL;
 
 
+
+
+
+
+
+
+
+
+
+

@@ -106,14 +106,41 @@
         <el-table-column prop="systemName" label="所属系统" width="120" />
         <el-table-column prop="serverTypeName" label="服务器类型" width="120" />
         <el-table-column prop="instanceName" label="实例名称" width="150" />
-        <el-table-column prop="serverIp" label="服务器IP" width="130" />
-        <el-table-column prop="sshPort" label="SSH端口" width="80" />
-        <el-table-column prop="username" label="用户名" width="100" />
+        
+        <!-- SSH相关字段（非Apollo类型显示） -->
+        <el-table-column prop="serverIp" label="服务器IP" width="130">
+          <template #default="{ row }">
+            <span v-if="!isServerApolloType(row)">{{ row.serverIp }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="sshPort" label="SSH端口" width="80">
+          <template #default="{ row }">
+            <span v-if="!isServerApolloType(row)">{{ row.sshPort }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="username" label="用户名" width="100">
+          <template #default="{ row }">
+            <span v-if="!isServerApolloType(row)">{{ row.username }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        
+        <!-- Apollo服务器地址（Apollo类型显示） -->
+        <el-table-column prop="apolloServerUrl" label="Apollo服务器地址" width="200">
+          <template #default="{ row }">
+            <span v-if="isServerApolloType(row)">{{ row.apolloServerUrl }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        
         <el-table-column prop="serverRole" label="角色" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.serverRole" size="small">
+            <el-tag v-if="row.serverRole && !isServerApolloType(row)" size="small">
               {{ row.serverRole }}
             </el-tag>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="80">
@@ -233,7 +260,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="服务器类型" prop="serverTypeId">
-          <el-select v-model="serverForm.serverTypeId" placeholder="请选择服务器类型" style="width: 100%">
+          <el-select 
+            v-model="serverForm.serverTypeId" 
+            placeholder="请选择服务器类型" 
+            style="width: 100%"
+            @change="handleServerTypeChange"
+          >
             <el-option
               v-for="type in serverTypeList"
               :key="type.id"
@@ -245,25 +277,36 @@
         <el-form-item label="实例名称" prop="instanceName">
           <el-input v-model="serverForm.instanceName" placeholder="请输入实例名称" />
         </el-form-item>
-        <el-form-item label="服务器IP" prop="serverIp">
-          <el-input v-model="serverForm.serverIp" placeholder="请输入服务器IP" />
-        </el-form-item>
-        <el-form-item label="SSH端口" prop="sshPort">
-          <el-input-number v-model="serverForm.sshPort" :min="1" :max="65535" placeholder="22" />
-        </el-form-item>
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="serverForm.username" placeholder="请输入用户名" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input v-model="serverForm.password" type="password" placeholder="请输入密码" show-password />
-        </el-form-item>
-        <el-form-item label="服务器角色" prop="serverRole">
-          <el-select v-model="serverForm.serverRole" placeholder="请选择服务器角色" clearable>
-            <el-option label="主服务器" value="MASTER" />
-            <el-option label="从服务器" value="SLAVE" />
-            <el-option label="备用服务器" value="BACKUP" />
-          </el-select>
-        </el-form-item>
+        
+        <!-- Apollo配置中心字段 -->
+        <template v-if="isApolloType">
+          <el-form-item label="Apollo服务器地址" prop="apolloServerUrl">
+            <el-input v-model="serverForm.apolloServerUrl" placeholder="请输入Apollo服务器地址，如：http://81.68.181.139:8080" />
+          </el-form-item>
+        </template>
+        
+        <!-- SSH相关字段（非Apollo类型显示） -->
+        <template v-else>
+          <el-form-item label="服务器IP" prop="serverIp">
+            <el-input v-model="serverForm.serverIp" placeholder="请输入服务器IP" />
+          </el-form-item>
+          <el-form-item label="SSH端口" prop="sshPort">
+            <el-input-number v-model="serverForm.sshPort" :min="1" :max="65535" placeholder="22" />
+          </el-form-item>
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="serverForm.username" placeholder="请输入用户名" />
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input v-model="serverForm.password" type="password" placeholder="请输入密码" show-password />
+          </el-form-item>
+          <el-form-item label="服务器角色" prop="serverRole">
+            <el-select v-model="serverForm.serverRole" placeholder="请选择服务器角色" clearable>
+              <el-option label="主服务器" value="MASTER" />
+              <el-option label="从服务器" value="SLAVE" />
+              <el-option label="备用服务器" value="BACKUP" />
+            </el-select>
+          </el-form-item>
+        </template>
         <el-form-item label="状态" prop="status">
           <el-radio-group v-model="serverForm.status">
             <el-radio :label="1">启用</el-radio>
@@ -292,7 +335,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { systemApi, serverTypeApi, serverInstanceApi } from '@/api/system'
 
@@ -347,6 +390,7 @@ export default {
       username: '',
       password: '',
       serverRole: '',
+      apolloServerUrl: '',
       status: 1,
       description: ''
     })
@@ -359,6 +403,19 @@ export default {
       typeCode: [
         { required: true, message: '请输入类型编码', trigger: 'blur' }
       ]
+    }
+
+    // 计算属性：判断是否为Apollo类型
+    const isApolloType = computed(() => {
+      if (!serverForm.serverTypeId) return false
+      const selectedType = serverTypeList.value.find(type => type.id === serverForm.serverTypeId)
+      return selectedType && selectedType.typeCode === 'APOLLO_CONFIG'
+    })
+
+    // 判断服务器是否为Apollo类型
+    const isServerApolloType = (server) => {
+      const serverType = serverTypeList.value.find(type => type.id === server.serverTypeId)
+      return serverType && serverType.typeCode === 'APOLLO_CONFIG'
     }
 
     const serverRules = {
@@ -380,6 +437,10 @@ export default {
       ],
       password: [
         { required: true, message: '请输入密码', trigger: 'blur' }
+      ],
+      apolloServerUrl: [
+        { required: true, message: '请输入Apollo服务器地址', trigger: 'blur' },
+        { pattern: /^https?:\/\/.+/, message: '请输入正确的URL地址', trigger: 'blur' }
       ]
     }
 
@@ -539,6 +600,22 @@ export default {
     }
 
     // 服务器实例操作
+    // 处理服务器类型变化
+    const handleServerTypeChange = (typeId) => {
+      // 清空相关字段
+      if (isApolloType.value) {
+        // 切换到Apollo类型，清空SSH字段
+        serverForm.serverIp = ''
+        serverForm.sshPort = 22
+        serverForm.username = ''
+        serverForm.password = ''
+        serverForm.serverRole = ''
+      } else {
+        // 切换到非Apollo类型，清空Apollo字段
+        serverForm.apolloServerUrl = ''
+      }
+    }
+
     const handleAddServer = () => {
       isEditServer.value = false
       serverDialogVisible.value = true
@@ -575,9 +652,13 @@ export default {
         ElMessage.info('正在测试连接...')
         await serverInstanceApi.testServerConnection(row.id)
         ElMessage.success('连接测试成功')
+        // 刷新服务器列表以更新连接状态
+        await fetchServerList()
       } catch (error) {
         console.error('连接测试失败:', error)
         ElMessage.error('连接测试失败：' + (error.message || '未知错误'))
+        // 即使测试失败也要刷新列表，因为连接状态可能已经更新
+        await fetchServerList()
       }
     }
 
@@ -666,6 +747,8 @@ export default {
       serverForm,
       typeRules,
       serverRules,
+      isApolloType,
+      isServerApolloType,
       handleSearch,
       handleReset,
       handleAddType,
@@ -673,6 +756,7 @@ export default {
       handleDeleteType,
       handleTypeSubmit,
       handleTypeDialogClose,
+      handleServerTypeChange,
       handleAddServer,
       handleEditServer,
       handleDeleteServer,

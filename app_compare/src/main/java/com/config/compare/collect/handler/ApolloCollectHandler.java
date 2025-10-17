@@ -78,19 +78,9 @@ public class ApolloCollectHandler extends AbstractCollectHandler {
                     .mapToInt(Map::size)
                     .sum();
             
-            // 添加采集信息
-            Map<String, Object> result = new java.util.HashMap<>(allConfigs);
-            result.put("_collectInfo", Map.of(
-                "configServiceUrl", apolloConfig.getConfigServiceUrl(),
-                "appId", apolloConfig.getAppId(),
-                "cluster", apolloConfig.getCluster(),
-                "totalNamespaces", allConfigs.size(),
-                "totalConfigCount", totalConfigCount,
-                "collectTime", java.time.LocalDateTime.now().toString()
-            ));
-
-            String content = JSONUtil.toJsonPrettyStr(result);
-            log.info("Apollo配置采集完成，总命名空间数: {}, 总配置项: {}", 
+            // 直接返回原始配置数据，不添加采集信息，保持与模板测试一致
+            String content = JSONUtil.toJsonPrettyStr(allConfigs);
+            log.info("Apollo配置采集完成，总命名空间数: {}, 总配置项: {}",
                     allConfigs.size(), totalConfigCount);
 
             return CollectResult.success(content)
@@ -113,10 +103,26 @@ public class ApolloCollectHandler extends AbstractCollectHandler {
 
         ApolloConfig config = new ApolloConfig();
         
+        // 记录调试信息
+        log.info("构建Apollo配置 - 服务器实例: {}, 配置参数: {}",
+                 serverInstance != null ? serverInstance.getInstanceName() : "null",
+                 configParams != null ? JSONUtil.toJsonStr(configParams) : "null");
+        
         // 优先使用配置参数，其次使用服务器实例配置
-        config.setConfigServiceUrl(getConfigValue(configParams, "configServiceUrl", serverInstance.getApolloServerUrl()));
-        config.setAppId(getConfigValue(configParams, "appId", serverInstance.getApolloAppId()));
-        config.setCluster(getConfigValue(configParams, "cluster", serverInstance.getApolloCluster(), "default"));
+        String configServiceUrl = getConfigValue(configParams, "configServiceUrl", serverInstance.getApolloServerUrl());
+        String appId = getConfigValue(configParams, "appId", serverInstance.getApolloAppId());
+        String cluster = getConfigValue(configParams, "cluster", serverInstance.getApolloCluster(), "default");
+        
+        // 如果配置参数中没有，尝试从模板内容中解析（兼容旧版本）
+        if (StrUtil.isBlank(configServiceUrl) && configParams != null) {
+            configServiceUrl = getConfigValue(configParams, "serverUrl", serverInstance.getApolloServerUrl());
+        }
+        
+        log.info("Apollo配置 - configServiceUrl: {}, appId: {}, cluster: {}", configServiceUrl, appId, cluster);
+        
+        config.setConfigServiceUrl(configServiceUrl);
+        config.setAppId(appId);
+        config.setCluster(cluster);
 
         // 解析命名空间列表
         String namespacesStr = getConfigValue(configParams, "namespaces", serverInstance.getApolloNamespaces());

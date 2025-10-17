@@ -33,6 +33,12 @@ const routes = [
         name: 'ServerManage',
         component: () => import('@/views/system/servers/index.vue'),
         meta: { title: '服务器管理', icon: 'Cpu' }
+      },
+      {
+        path: 'schedule',
+        name: 'TaskSchedule',
+        component: () => import('@/views/report/schedule/index.vue'),
+        meta: { title: '任务调度', icon: 'Timer' }
       }
     ]
   },
@@ -122,43 +128,25 @@ const routes = [
         path: 'dashboard',
         name: 'ReportDashboard',
         component: () => import('@/views/report/dashboard/index.vue'),
-        meta: { title: '仪表板', icon: 'DataBoard' }
+        meta: { title: '总览仪表板', icon: 'DataBoard' }
       },
       {
-        path: 'schedule',
-        name: 'TaskSchedule',
-        component: () => import('@/views/report/schedule/index.vue'),
-        meta: { title: '任务调度', icon: 'Timer' }
+        path: 'compare-report',
+        name: 'CompareReport',
+        component: () => import('@/views/report/compare-report/index.vue'),
+        meta: { title: '比对报告', icon: 'Document' }
       },
       {
-        path: 'execution',
-        name: 'TaskExecution',
-        component: () => import('@/views/report/execution/index.vue'),
-        meta: { title: '执行报告', icon: 'Document' }
+        path: 'statistics',
+        name: 'TaskStatistics',
+        component: () => import('@/views/report/statistics/index.vue'),
+        meta: { title: '执行统计', icon: 'PieChart' }
       },
       {
-        path: 'diff-analysis',
-        name: 'DiffAnalysis',
-        component: () => import('@/views/report/diff-analysis/index.vue'),
-        meta: { title: '差异分析', icon: 'TrendCharts' }
-      },
-      {
-        path: 'system-health',
+        path: 'health',
         name: 'SystemHealth',
         component: () => import('@/views/report/system-health/index.vue'),
-        meta: { title: '系统健康', icon: 'CircleCheck' }
-      },
-      {
-        path: 'collect-stats',
-        name: 'CollectStats',
-        component: () => import('@/views/report/collect-stats/index.vue'),
-        meta: { title: '采集统计', icon: 'PieChart' }
-      },
-      {
-        path: 'compare-stats',
-        name: 'CompareStats',
-        component: () => import('@/views/report/compare-stats/index.vue'),
-        meta: { title: '比对统计', icon: 'Histogram' }
+        meta: { title: '系统监控', icon: 'Monitor' }
       }
     ]
   }

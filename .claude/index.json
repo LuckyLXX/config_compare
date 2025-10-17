@@ -1,0 +1,204 @@
+{
+  "timestamp": "2025-09-18T12:40:51.000Z",
+  "project": {
+    "name": "config_compare",
+    "description": "配置比对系统",
+    "version": "1.0.0"
+  },
+  "modules": [
+    {
+      "name": "root",
+      "path": ".",
+      "type": "root",
+      "files": {
+        "total": 15,
+        "scanned": 8,
+        "coverage": 53.3,
+        "key_files": [
+          "CLAUDE.md",
+          ".gitignore",
+          "UAT生产环境配置比对系统完善需求文档.md",
+          "待办清单.md"
+        ]
+      }
+    },
+    {
+      "name": "app_compare",
+      "path": "app_compare",
+      "type": "backend",
+      "technology": "Spring Boot",
+      "files": {
+        "total": 85,
+        "scanned": 50,
+        "coverage": 58.8,
+        "key_files": [
+          "pom.xml",
+          "src/main/java/com/config/compare/ConfigCompareApplication.java",
+          "src/main/java/com/config/compare/controller/CompareController.java",
+          "src/main/java/com/config/compare/controller/CollectController.java",
+          "src/main/java/com/config/compare/collect/handler/ApolloCollectHandler.java",
+          "src/main/java/com/config/compare/compare/algorithm/impl/JsonCompareAlgorithm.java",
+          "src/main/java/com/config/compare/entity/CollectTask.java"
+        ],
+        "entry_points": [
+          "ConfigCompareApplication.java"
+        ],
+        "api_interfaces": [
+          "controller/CompareController.java",
+          "controller/CollectController.java",
+          "controller/ReportDashboardController.java"
+        ],
+        "test_files": [],
+        "config_files": [
+          "pom.xml",
+          "src/main/resources/application.yml"
+        ],
+        "data_models": [
+          "entity/CollectTask.java",
+          "entity/CompareTask.java",
+          "entity/SystemInfo.java"
+        ]
+      }
+    },
+    {
+      "name": "web_compare",
+      "path": "web_compare",
+      "type": "frontend",
+      "technology": "Vue 3 + Element Plus",
+      "files": {
+        "total": 35,
+        "scanned": 18,
+        "coverage": 51.4,
+        "key_files": [
+          "package.json",
+          "src/main.js",
+          "src/App.vue",
+          "src/router/index.js",
+          "src/views/dashboard/index.vue",
+          "src/views/collect/tasks/index.vue",
+          "src/views/compare/results/index.vue",
+          "src/views/report/dashboard/index.vue"
+        ],
+        "entry_points": [
+          "src/main.js"
+        ],
+        "api_interfaces": [
+          "src/utils/request.js"
+        ],
+        "test_files": [],
+        "config_files": [
+          "package.json",
+          "vite.config.js"
+        ],
+        "data_models": []
+      }
+    },
+    {
+      "name": "database",
+      "path": "database",
+      "type": "database",
+      "technology": "MySQL",
+      "files": {
+        "total": 15,
+        "scanned": 15,
+        "coverage": 100,
+        "key_files": [
+          "schema.sql",
+          "init_data.sql",
+          "update_schema_v1.1.sql",
+          "fix_database_schema.sql",
+          "fix_compare_task_complete.sql"
+        ],
+        "entry_points": [
+          "schema.sql"
+        ],
+        "api_interfaces": [],
+        "test_files": [],
+        "config_files": [],
+        "data_models": []
+      }
+    }
+  ],
+  "statistics": {
+    "total_files": 150,
+    "scanned_files": 91,
+    "coverage_percentage": 60.7,
+    "by_language": {
+      "Java": 50,
+      "Vue": 18,
+      "SQL": 15,
+      "JavaScript": 8,
+      "JSON": 5,
+      "Markdown": 4,
+      "XML": 1
+    },
+    "by_file_type": {
+      "Source Code": 68,
+      "Configuration": 10,
+      "Documentation": 8,
+      "Database": 15,
+      "Build": 2
+    }
+  },
+  "coverage_analysis": {
+    "strengths": [
+      "核心业务模块完整覆盖",
+      "主要配置文件已分析",
+      "数据库结构完整",
+      "API接口识别完成"
+    ],
+    "gaps": [
+      {
+        "module": "app_compare",
+        "type": "tests",
+        "description": "缺少单元测试和集成测试",
+        "priority": "high"
+      },
+      {
+        "module": "web_compare",
+        "type": "tests",
+        "description": "缺少前端测试文件",
+        "priority": "medium"
+      },
+      {
+        "module": "app_compare",
+        "type": "utilities",
+        "description": "部分工具类未分析",
+        "priority": "low"
+      },
+      {
+        "module": "web_compare",
+        "type": "components",
+        "description": "部分公共组件未分析",
+        "priority": "low"
+      }
+    ],
+    "recommendations": [
+      "为后端核心业务逻辑添加单元测试",
+      "为前端关键组件添加组件测试",
+      "完善API接口文档",
+      "添加性能监控和日志功能",
+      "建立CI/CD流水线"
+    ]
+  },
+  "ignore_patterns": [
+    "node_modules/**",
+    "target/**",
+    "dist/**",
+    "logs/**",
+    ".git/**",
+    ".vscode/**",
+    "*.class",
+    "*.jar"
+  ],
+  "scanning_status": {
+    "phase": "completed",
+    "truncated": false,
+    "last_updated": "2025-09-18T12:40:51.000Z",
+    "next_scan_suggestions": [
+      "app_compare/src/test/** - 测试文件扫描",
+      "web_compare/src/components/** - 公共组件扫描",
+      "app_compare/src/main/resources/** - 配置文件详细扫描"
+    ]
+  }
+}

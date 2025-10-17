@@ -98,23 +98,31 @@ public class HttpConnectionUtil {
                 healthCheckUrl += "/";
             }
             
-            // 尝试访问Apollo的健康检查接口或首页
+            // Apollo配置中心常用的健康检查接口
             String[] testUrls = {
-                healthCheckUrl + "health",
-                healthCheckUrl + "actuator/health", 
-                healthCheckUrl,
-                healthCheckUrl + "apps/" + (StringUtils.hasText(appId) ? appId : "SampleApp")
+                healthCheckUrl + "health",                    // Spring Boot Actuator健康检查
+                healthCheckUrl + "actuator/health",          // Spring Boot Actuator健康检查
+                healthCheckUrl + "apollo/health",             // Apollo专用健康检查
+                healthCheckUrl,                              // 直接访问根路径
+                healthCheckUrl + "apps/" + (StringUtils.hasText(appId) ? appId : "SampleApp")  // 应用配置接口
             };
 
             for (String testUrl : testUrls) {
                 log.info("尝试Apollo连接测试: {}", testUrl);
                 if (testHttpConnection(testUrl)) {
-                    log.info("Apollo连接测试成功: {}", apolloServerUrl);
+                    log.info("Apollo连接测试成功: {} (通过URL: {})", apolloServerUrl, testUrl);
                     return true;
                 }
             }
             
-            log.warn("Apollo连接测试失败: 所有测试URL都无法访问");
+            // 如果所有标准URL都失败，尝试简单的HTTP连接测试
+            log.info("尝试基础HTTP连接测试: {}", apolloServerUrl);
+            if (testHttpConnection(apolloServerUrl)) {
+                log.info("Apollo基础连接测试成功: {}", apolloServerUrl);
+                return true;
+            }
+            
+            log.warn("Apollo连接测试失败: 所有测试URL都无法访问 {}", apolloServerUrl);
             return false;
             
         } catch (Exception e) {

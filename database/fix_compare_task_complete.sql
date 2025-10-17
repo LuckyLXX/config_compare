@@ -19,3 +19,13 @@ SELECT COUNT(*) as total_records FROM compare_task;
 SELECT server_type_id, COUNT(*) as count FROM compare_task GROUP BY server_type_id;
 
 
+
+
+
+
+
+
+
+
+
+

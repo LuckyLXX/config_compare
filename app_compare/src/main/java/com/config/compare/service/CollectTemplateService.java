@@ -359,14 +359,14 @@ public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, C
             
             long executionTime = System.currentTimeMillis() - startTime;
             
-            // 格式化配置数据用于预览
-            String configPreview;
+            // 直接返回原始配置数据，与任务执行保持一致，不添加任何额外信息
+            String configData;
             try {
-                configPreview = new com.fasterxml.jackson.databind.ObjectMapper()
+                configData = new com.fasterxml.jackson.databind.ObjectMapper()
                     .writerWithDefaultPrettyPrinter()
                     .writeValueAsString(allConfigs);
             } catch (Exception e) {
-                configPreview = allConfigs.toString();
+                configData = allConfigs.toString();
             }
             
             int totalConfigCount = allConfigs.values().stream()
@@ -375,19 +375,13 @@ public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, C
             
             log.info("Apollo配置测试成功，总配置项数: {}, 耗时: {}ms", totalConfigCount, executionTime);
             
+            // 返回与任务执行完全一致的数据格式，只包含原始配置数据
             return Map.of(
                 "success", true,
                 "message", "Apollo配置测试成功",
-                "testResult", configPreview,
-                "executionTime", executionTime,
-                "configInfo", Map.of(
-                    "configServiceUrl", apolloConfig.getConfigServiceUrl(),
-                    "appId", apolloConfig.getAppId(),
-                    "cluster", apolloConfig.getCluster(),
-                    "namespaces", apolloConfig.getNamespaces(),
-                    "totalConfigCount", totalConfigCount,
-                    "successNamespaces", allConfigs.size()
-                )
+                "testResult", configData,
+                "executionTime", executionTime
+                // 移除configInfo等额外信息，保持与任务执行结果一致
             );
             
         } catch (Exception e) {

@@ -134,9 +134,12 @@
         <div class="app-card">
           <div class="card-header">
             <h3>最近执行记录</h3>
-            <el-button type="text" @click="viewAllExecutions">查看全部</el-button>
+            <div>
+              <el-switch v-model="showAbnormalOnly" active-text="仅看异常" style="margin-right: 10px" />
+              <el-button type="text" @click="viewAllExecutions">查看全部</el-button>
+            </div>
           </div>
-          <el-table :data="recentExecutions" stripe size="small">
+          <el-table :data="filteredRecentExecutions" stripe size="small">
             <el-table-column prop="taskName" label="任务名称" min-width="120" />
             <el-table-column prop="taskType" label="类型" width="80">
               <template #default="{ row }">
@@ -152,7 +155,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="startTime" label="开始时间" width="150" />
+            <el-table-column prop="executeTime" label="开始时间" width="150" />
             <el-table-column prop="duration" label="耗时" width="80" />
             <el-table-column label="操作" width="80">
               <template #default="{ row }">
@@ -189,7 +192,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
@@ -226,8 +229,16 @@ export default {
     const loadOverview = async () => {
       try {
         const params = getDateRangeParams()
+        console.log('🔍 请求概览数据参数:', params)
         const response = await reportDashboardApi.getDashboardOverview(params)
-        overview.value = response || {}
+        console.log('🔍 概览数据API响应:', response)
+        console.log('🔍 概览数据响应类型:', typeof response)
+        console.log('🔍 概览数据响应结构:', JSON.stringify(response, null, 2))
+        
+        overview.value = response?.data || {}
+        console.log('🔍 设置后的overview.value:', overview.value)
+        console.log('🔍 overview.value.systemCount:', overview.value.systemCount)
+        console.log('🔍 overview.value.taskCount:', overview.value.taskCount)
       } catch (error) {
         console.error('获取概览数据失败:', error)
       }
@@ -237,7 +248,10 @@ export default {
     const loadSystemStats = async () => {
       try {
         const response = await reportDashboardApi.getSystemStats()
-        systemStats.value = response.records || []
+        console.log('🔍 系统状态统计API响应:', response)
+        console.log('🔍 系统状态统计响应结构:', JSON.stringify(response, null, 2))
+        systemStats.value = response?.data?.records || []
+        console.log('🔍 设置后的systemStats.value:', systemStats.value)
       } catch (error) {
         console.error('获取系统状态统计失败:', error)
       }
@@ -247,7 +261,10 @@ export default {
     const loadRecentExecutions = async () => {
       try {
         const response = await reportDashboardApi.getRecentExecutions({ size: 10 })
-        recentExecutions.value = response.records || []
+        console.log('🔍 最近执行记录API响应:', response)
+        console.log('🔍 最近执行记录响应结构:', JSON.stringify(response, null, 2))
+        recentExecutions.value = response?.data?.records || []
+        console.log('🔍 设置后的recentExecutions.value:', recentExecutions.value)
       } catch (error) {
         console.error('获取最近执行记录失败:', error)
       }
@@ -257,7 +274,7 @@ export default {
     const loadAlerts = async () => {
       try {
         const response = await reportDashboardApi.getAlerts()
-        alerts.value = response.records || []
+        alerts.value = response?.data?.records || []
       } catch (error) {
         console.error('获取告警信息失败:', error)
       }
@@ -270,8 +287,11 @@ export default {
           period: trendPeriod.value,
           ...getDateRangeParams()
         }
+        console.log('🔍 请求任务趋势数据参数:', params)
         const response = await reportDashboardApi.getTaskTrends(params)
-        renderTaskTrendChart(response || {})
+        console.log('🔍 任务趋势数据API响应:', response)
+        console.log('🔍 任务趋势数据响应结构:', JSON.stringify(response, null, 2))
+        renderTaskTrendChart(response?.data || {})
       } catch (error) {
         console.error('获取任务趋势数据失败:', error)
       }
@@ -281,8 +301,11 @@ export default {
     const loadCompareDistribution = async () => {
       try {
         const params = getDateRangeParams()
+        console.log('🔍 请求比对结果分布参数:', params)
         const response = await reportDashboardApi.getCompareDistribution(params)
-        renderCompareDistributionChart(response || {})
+        console.log('🔍 比对结果分布API响应:', response)
+        console.log('🔍 比对结果分布响应结构:', JSON.stringify(response, null, 2))
+        renderCompareDistributionChart(response?.data || {})
       } catch (error) {
         console.error('获取比对结果分布数据失败:', error)
       }
@@ -291,6 +314,11 @@ export default {
     // 渲染任务趋势图表
     const renderTaskTrendChart = (data) => {
       if (!taskTrendChartInstance) return
+      
+      console.log('🔍 渲染任务趋势图表数据:', data)
+      console.log('🔍 图表数据dates:', data.dates)
+      console.log('🔍 图表数据collectCounts:', data.collectCounts)
+      console.log('🔍 图表数据compareCounts:', data.compareCounts)
       
       const option = {
         tooltip: {
@@ -333,6 +361,11 @@ export default {
     // 渲染比对结果分布图表
     const renderCompareDistributionChart = (data) => {
       if (!compareDistributionChartInstance) return
+      
+      console.log('🔍 渲染比对结果分布图表数据:', data)
+      console.log('🔍 分布数据consistent:', data.consistent)
+      console.log('🔍 分布数据inconsistent:', data.inconsistent)
+      console.log('🔍 分布数据failed:', data.failed)
       
       const option = {
         tooltip: {
@@ -448,6 +481,7 @@ export default {
     const getExecutionStatusType = (status) => {
       const statusMap = {
         'SUCCESS': 'success',
+        'PARTIAL': 'warning',
         'FAILED': 'danger',
         'RUNNING': 'warning',
         'CANCELLED': 'info'
@@ -458,6 +492,7 @@ export default {
     const getExecutionStatusText = (status) => {
       const textMap = {
         'SUCCESS': '成功',
+        'PARTIAL': '部分成功',
         'FAILED': '失败',
         'RUNNING': '运行中',
         'CANCELLED': '已取消'
@@ -479,9 +514,13 @@ export default {
     
     // 组件挂载
     onMounted(async () => {
+      console.log('🔍 页面加载开始')
       initDateRange()
+      console.log('🔍 初始化日期范围完成:', dateRange.value)
       await initCharts()
+      console.log('🔍 初始化图表完成')
       await loadAll()
+      console.log('🔍 加载所有数据完成')
     })
     
     // 组件卸载
@@ -491,12 +530,20 @@ export default {
       window.removeEventListener('resize', () => {})
     })
     
+    const showAbnormalOnly = ref(false)
+    const filteredRecentExecutions = computed(() => {
+      if (!showAbnormalOnly.value) return recentExecutions.value
+      return (recentExecutions.value || []).filter(r => r.status === 'FAILED' || r.status === 'PARTIAL')
+    })
+
     return {
       dateRange,
       trendPeriod,
       overview,
       systemStats,
       recentExecutions,
+      filteredRecentExecutions,
+      showAbnormalOnly,
       alerts,
       taskTrendChart,
       compareDistributionChart,

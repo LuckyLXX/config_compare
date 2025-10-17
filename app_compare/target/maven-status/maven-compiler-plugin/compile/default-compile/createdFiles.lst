@@ -33,6 +33,7 @@ com\config\compare\collect\handler\CollectHandler.class
 com\config\compare\entity\CompareTask.class
 com\config\compare\service\CompareDiffDetailService.class
 com\config\compare\util\SSHUtil.class
+com\config\compare\service\ReportDashboardService.class
 com\config\compare\controller\SystemInfoController.class
 com\config\compare\collect\model\CollectResult.class
 com\config\compare\collect\model\CollectContext.class
@@ -45,6 +46,7 @@ com\config\compare\service\ServerTypeService.class
 com\config\compare\entity\CollectTemplate.class
 com\config\compare\service\CollectService.class
 com\config\compare\service\impl\CollectTypeExtensionServiceImpl.class
+com\config\compare\service\impl\CompareReportServiceImpl.class
 com\config\compare\compare\model\CompareContext.class
 com\config\compare\service\CompareTaskService.class
 com\config\compare\common\result\ResultCode.class
@@ -54,6 +56,7 @@ com\config\compare\entity\CompareExecution.class
 com\config\compare\collect\handler\ApiCollectHandler.class
 com\config\compare\common\request\PageRequest.class
 com\config\compare\entity\ConfigCategory.class
+com\config\compare\service\impl\ReportDashboardServiceImpl.class
 com\config\compare\service\SystemInfoService.class
 com\config\compare\compare\algorithm\impl\TextCompareAlgorithm$1.class
 com\config\compare\controller\CollectTypeExtensionController.class
@@ -65,7 +68,7 @@ com\config\compare\controller\TestController.class
 com\config\compare\service\impl\CompareResultServiceImpl.class
 com\config\compare\apollo\controller\ApolloController.class
 com\config\compare\controller\ReportDashboardController.class
-com\config\compare\controller\ReportAnalysisController.class
+com\config\compare\service\CompareReportService.class
 com\config\compare\entity\CollectTask.class
 com\config\compare\mapper\CollectTypeExtensionMapper.class
 com\config\compare\collect\manager\CollectHandlerManager.class
@@ -86,6 +89,7 @@ com\config\compare\controller\ReportExecutionController.class
 com\config\compare\service\DashboardService.class
 com\config\compare\entity\CompareRule.class
 com\config\compare\mapper\CompareDiffDetailMapper.class
+com\config\compare\controller\CompareReportController.class
 com\config\compare\entity\CompareResult.class
 com\config\compare\entity\ServerInstance.class
 com\config\compare\service\impl\CollectExecutionServiceImpl.class

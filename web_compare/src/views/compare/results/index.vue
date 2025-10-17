@@ -499,12 +499,37 @@ export default {
           
           // 构建差异行映射
           diffLineMap.value.clear()
+          
+          // 处理文本比对的差异（line_格式）
           diffList.value.forEach(diff => {
             if (diff.diffPath && diff.diffPath.startsWith('line_')) {
               const lineNum = parseInt(diff.diffPath.replace('line_', '')) - 1
               diffLineMap.value.set(lineNum, diff)
             }
           })
+          
+          // 处理JSON比对的差异：通过diffKey找到对应的行
+          if (diffLineMap.value.size === 0) {
+            const baselineLines = baselineContent.split('\n')
+            const currentLines = currentContent.split('\n')
+            
+            // 遍历差异列表，通过diffKey找到对应的行
+            diffList.value.forEach(diff => {
+              if (diff.diffKey) {
+                // 在基线内容和当前内容中查找包含diffKey的行
+                for (let i = 0; i < Math.max(baselineLines.length, currentLines.length); i++) {
+                  const baselineLine = baselineLines[i] || ''
+                  const currentLine = currentLines[i] || ''
+                  
+                  // 如果行中包含diffKey，标记为差异行
+                  if (baselineLine.includes(diff.diffKey) || currentLine.includes(diff.diffKey)) {
+                    diffLineMap.value.set(i, diff)
+                    break // 找到第一个匹配的行就停止
+                  }
+                }
+              }
+            })
+          }
         }
       } catch (error) {
         console.error('构建左右对比数据失败:', error)

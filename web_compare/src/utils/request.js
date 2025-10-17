@@ -10,6 +10,15 @@ const service = axios.create({
 // request拦截器
 service.interceptors.request.use(
   config => {
+    // 添加调试日志
+    console.log('[DEBUG] 请求拦截器 - 请求配置:', {
+      url: config.baseURL + config.url,
+      method: config.method,
+      params: config.params,
+      data: config.data,
+      headers: config.headers
+    })
+    
     // 在发送请求之前做一些处理
     if (config.method === 'post' || config.method === 'put') {
       // POST和PUT请求时，将参数转换为JSON格式
@@ -30,6 +39,13 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   response => {
     const res = response.data
+    
+    // 添加调试日志
+    console.log('[DEBUG] 响应拦截器 - 响应数据:', {
+      status: response.status,
+      url: response.config.url,
+      data: res
+    })
     
     // 如果返回的状态码为200，说明接口请求成功，可以正常拿到数据
     if (response.status === 200) {

@@ -421,15 +421,6 @@
                 <div v-if="form.templateType === 'APOLLO'" class="config-section">
                   <el-row :gutter="20">
                     <el-col :span="12">
-                      <el-form-item label="服务器地址" required>
-                        <el-input 
-                          v-model="apolloConfig.serverUrl" 
-                          placeholder="例如: http://apollo.example.com:8080"
-                          clearable
-                        />
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
                       <el-form-item label="应用标识" required>
                         <el-input 
                           v-model="apolloConfig.appId" 
@@ -438,10 +429,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                  </el-row>
-
-                  <el-row :gutter="20">
-                    <el-col :span="8">
+                    <el-col :span="12">
                       <el-form-item label="环境" required>
                         <el-input 
                           v-model="apolloConfig.env" 
@@ -450,6 +438,9 @@
                         />
                       </el-form-item>
                     </el-col>
+                  </el-row>
+
+                  <el-row :gutter="20">
                     <el-col :span="8">
                       <el-form-item label="集群">
                         <el-input 
@@ -513,6 +504,7 @@
                         placeholder="选择测试服务器" 
                         size="small"
                         style="width: 150px; margin-right: 8px"
+                        @change="handleTestServerChange"
                       >
                         <el-option 
                           v-for="server in testServerList" 
@@ -521,6 +513,15 @@
                           :value="server.id"
                         />
                       </el-select>
+                      <el-button 
+                        size="small" 
+                        @click="refreshTestServerList"
+                        :icon="Refresh"
+                        style="margin-right: 8px"
+                        title="刷新服务器列表"
+                      >
+                        刷新
+                      </el-button>
                       <el-button 
                         type="primary" 
                         size="small" 
@@ -534,7 +535,7 @@
                   </div>
                 </template>
                 <div class="json-preview">
-                  <pre>{{ formatJson(generateConfig()) }}</pre>
+                  <pre>{{ formatJson(generateConfig) }}</pre>
                 </div>
               </el-card>
 
@@ -679,7 +680,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Plus, 
@@ -693,7 +694,7 @@ import {
   Setting 
 } from '@element-plus/icons-vue'
 import { collectTemplateApi } from '@/api/collect'
-import { serverTypeApi } from '@/api/system'
+import { serverTypeApi, serverInstanceApi } from '@/api/system'
 
 export default {
   name: 'CollectTemplates',
@@ -771,6 +772,11 @@ export default {
     const testing = ref(false)
     const testServerId = ref(null)
     const testServerList = ref([])
+
+    // 计算属性：判断是否为Apollo类型
+    const isApolloType = computed(() => {
+      return form.templateType === 'APOLLO'
+    })
 
     // 类型描述
     const typeDescriptions = {
@@ -949,6 +955,16 @@ export default {
         console.log('测试服务器列表:', testServerList.value)
       } catch (error) {
         console.error('获取测试服务器列表失败:', error)
+      }
+    }
+
+    // 刷新测试服务器列表
+    const refreshTestServerList = async () => {
+      try {
+        await getTestServerList()
+        ElMessage.success('服务器列表已刷新')
+      } catch (error) {
+        ElMessage.error('刷新服务器列表失败')
       }
     }
     
@@ -1247,7 +1263,7 @@ export default {
     }
 
     // 生成配置JSON
-    const generateConfig = () => {
+    const generateConfig = computed(() => {
       switch (form.templateType) {
         case 'COMMAND':
           return {
@@ -1283,8 +1299,20 @@ export default {
           }
           return config
         case 'APOLLO':
+          // 优先从选择的测试服务器获取serverUrl，如果没有选择服务器则使用表单配置
+          let serverUrl = ''
+          if (testServerId.value && testServerList.value.length > 0) {
+            const selectedServer = testServerList.value.find(server => server.id === testServerId.value)
+            if (selectedServer && selectedServer.apolloServerUrl) {
+              serverUrl = selectedServer.apolloServerUrl
+            }
+          }
+          // 如果服务器实例没有URL，则使用表单配置的URL
+          if (!serverUrl) {
+            serverUrl = apolloConfig.serverUrl
+          }
           return {
-            serverUrl: apolloConfig.serverUrl,
+            serverUrl: serverUrl,
             appId: apolloConfig.appId,
             env: apolloConfig.env,
             cluster: apolloConfig.cluster || 'default',
@@ -1294,7 +1322,7 @@ export default {
         default:
           return {}
       }
-    }
+    })
 
     // 格式化JSON
     const formatJson = (obj) => {
@@ -1346,6 +1374,66 @@ export default {
     const testResultVisible = ref(false)
     const testResult = ref(null)
 
+    // 处理测试服务器变化
+    const handleTestServerChange = async (serverId) => {
+      if (!serverId) return
+      
+      try {
+        // 从testServerList中找到对应的服务器
+        const server = testServerList.value.find(s => s.id === serverId)
+        if (!server) {
+          ElMessage.error('未找到选中的服务器信息')
+          return
+        }
+        
+        // 获取服务器类型信息
+        const serverType = serverTypeList.value.find(type => type.id === server.serverTypeId)
+        if (!serverType) {
+          ElMessage.error('未找到服务器类型信息')
+          return
+        }
+        
+        // 如果是Apollo类型，自动填充配置
+        if (serverType.typeCode === 'APOLLO_CONFIG' && server.apolloServerUrl) {
+          apolloConfig.serverUrl = server.apolloServerUrl
+          
+          // 如果模板内容为空，生成默认的Apollo配置
+          if (!form.templateContent) {
+            const defaultConfig = {
+              configServiceUrl: server.apolloServerUrl,
+              appId: 'default-app',
+              cluster: 'default',
+              env: 'DEV',
+              namespaces: 'application'
+            }
+            form.templateContent = JSON.stringify(defaultConfig, null, 2)
+          } else {
+            // 如果已有配置，更新serverUrl
+            try {
+              const existingConfig = JSON.parse(form.templateContent)
+              existingConfig.configServiceUrl = server.apolloServerUrl
+              form.templateContent = JSON.stringify(existingConfig, null, 2)
+            } catch (e) {
+              // 如果解析失败，使用默认配置
+              const defaultConfig = {
+                configServiceUrl: server.apolloServerUrl,
+                appId: 'default-app',
+                cluster: 'default',
+                env: 'DEV',
+                namespaces: 'application'
+              }
+              form.templateContent = JSON.stringify(defaultConfig, null, 2)
+            }
+          }
+          
+          ElMessage.success('已自动填充Apollo服务器地址')
+        }
+      } catch (error) {
+        console.error('处理服务器变化失败:', error)
+        ElMessage.error('处理服务器变化失败')
+      }
+    }
+
     // 测试连接
     const testConnection = async () => {
       if (!form.templateType) {
@@ -1362,7 +1450,7 @@ export default {
       testResult.value = null
       
       try {
-        const config = generateConfig()
+        const config = generateConfig.value
         console.log('测试连接配置:', config)
         console.log('测试服务器ID:', testServerId.value)
         
@@ -1472,6 +1560,7 @@ export default {
       testing,
       testServerId,
       testServerList,
+      isApolloType,
       typeDescriptions,
       // 测试结果相关
       testResultVisible,
@@ -1490,6 +1579,8 @@ export default {
       handleSubmit,
       handleDialogClose,
       handleTypeChange,
+      handleTestServerChange,
+      refreshTestServerList,
       addHeader,
       removeHeader,
       // 工具方法

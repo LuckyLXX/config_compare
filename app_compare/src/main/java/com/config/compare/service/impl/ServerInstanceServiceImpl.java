@@ -274,37 +274,44 @@ public class ServerInstanceServiceImpl extends ServiceImpl<ServerInstanceMapper,
         String errorMessage = null;
         
         try {
-            if (StringUtils.hasText(instance.getServerIp())) {
-                // SSH/SFTP连接测试
-                log.info("开始SSH连接测试: {}@{}:{}", instance.getUsername(), instance.getServerIp(), instance.getSshPort());
-                connectResult = com.config.compare.util.SshConnectionUtil.testSshConnectionWithRetry(
-                    instance.getServerIp(), 
-                    instance.getSshPort(), 
-                    instance.getUsername(), 
-                    instance.getPassword(),
-                    2 // 重试2次
-                );
-                
-                if (!connectResult) {
-                    errorMessage = "SSH连接失败，请检查服务器地址、端口、用户名和密码";
-                }
-                
-            } else if (StringUtils.hasText(instance.getApolloServerUrl())) {
+            // 根据服务器类型决定测试方式
+            ServerType serverType = serverTypeService.getById(instance.getServerTypeId());
+            if (serverType == null) {
+                errorMessage = "服务器类型不存在";
+                log.warn("服务器类型不存在: serverTypeId={}", instance.getServerTypeId());
+            } else if ("APOLLO_CONFIG".equals(serverType.getTypeCode())) {
                 // Apollo配置中心连接测试
-                log.info("开始Apollo连接测试: {}", instance.getApolloServerUrl());
-                connectResult = com.config.compare.util.HttpConnectionUtil.testApolloConnection(
-                    instance.getApolloServerUrl(),
-                    instance.getApolloAppId()
-                );
-                
-                if (!connectResult) {
-                    errorMessage = "Apollo连接失败，请检查服务器地址和网络连接";
+                if (!StringUtils.hasText(instance.getApolloServerUrl())) {
+                    errorMessage = "Apollo服务器地址不能为空";
+                } else {
+                    log.info("开始Apollo连接测试: {}", instance.getApolloServerUrl());
+                    connectResult = com.config.compare.util.HttpConnectionUtil.testApolloConnection(
+                        instance.getApolloServerUrl(),
+                        instance.getApolloAppId()
+                    );
+                    
+                    if (!connectResult) {
+                        errorMessage = "Apollo连接失败，请检查服务器地址和网络连接";
+                    }
                 }
-                
             } else {
-                errorMessage = "服务器实例配置不完整，缺少连接信息";
-                log.warn("服务器实例配置不完整: ID={}, serverIp={}, apolloServerUrl={}", 
-                    id, instance.getServerIp(), instance.getApolloServerUrl());
+                // SSH/SFTP连接测试（其他类型）
+                if (!StringUtils.hasText(instance.getServerIp())) {
+                    errorMessage = "服务器IP地址不能为空";
+                } else {
+                    log.info("开始SSH连接测试: {}@{}:{}", instance.getUsername(), instance.getServerIp(), instance.getSshPort());
+                    connectResult = com.config.compare.util.SshConnectionUtil.testSshConnectionWithRetry(
+                        instance.getServerIp(), 
+                        instance.getSshPort(), 
+                        instance.getUsername(), 
+                        instance.getPassword(),
+                        2 // 重试2次
+                    );
+                    
+                    if (!connectResult) {
+                        errorMessage = "SSH连接失败，请检查服务器地址、端口、用户名和密码";
+                    }
+                }
             }
             
             // 更新连接状态和连接时间
@@ -314,7 +321,8 @@ public class ServerInstanceServiceImpl extends ServiceImpl<ServerInstanceMapper,
                 .set(ServerInstance::getLastConnectTime, LocalDateTime.now())
                 .update();
                 
-            log.info("连接测试完成: ID={}, 结果={}", id, connectResult ? "成功" : "失败");
+            log.info("连接测试完成: ID={}, 结果={}, 连接状态已更新为: {}", 
+                id, connectResult ? "成功" : "失败", connectResult ? 1 : 0);
                 
         } catch (Exception e) {
             log.error("连接测试异常: ID={}", id, e);
@@ -333,9 +341,10 @@ public class ServerInstanceServiceImpl extends ServiceImpl<ServerInstanceMapper,
 
     @Override
     public void updateConnectStatus(Long id, Integer connectStatus) {
-        this.lambdaUpdate()
+        boolean success = this.lambdaUpdate()
             .eq(ServerInstance::getId, id)
             .set(ServerInstance::getConnectStatus, connectStatus)
             .update();
+        log.info("更新连接状态: ID={}, 状态={}, 更新结果={}", id, connectStatus, success);
     }
 }

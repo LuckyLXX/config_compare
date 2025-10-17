@@ -236,6 +236,40 @@ public class CompareController {
                 queryWrapper.eq(CompareResult::getCompareStatus, compareStatus);
             }
             
+            // 按任务名称搜索（需要通过关联查询）
+            if (taskName != null && !taskName.trim().isEmpty()) {
+                // 先查询匹配任务名称的任务ID列表
+                LambdaQueryWrapper<CompareTask> taskQueryWrapper = new LambdaQueryWrapper<>();
+                taskQueryWrapper.like(CompareTask::getTaskName, taskName.trim());
+                List<CompareTask> matchingTasks = compareTaskService.list(taskQueryWrapper);
+                
+                if (matchingTasks.isEmpty()) {
+                    // 如果没有匹配的任务，返回空结果
+                    return Result.success("查询成功", Map.of("records", List.of(), "total", 0, "current", current, "size", size));
+                } else {
+                    // 获取匹配任务的ID列表
+                    List<Long> taskIds = matchingTasks.stream().map(CompareTask::getId).collect(Collectors.toList());
+                    queryWrapper.in(CompareResult::getTaskId, taskIds);
+                }
+            }
+            
+            // 按系统ID搜索（需要通过关联查询）
+            if (systemId != null) {
+                // 先查询匹配系统ID的任务ID列表
+                LambdaQueryWrapper<CompareTask> taskQueryWrapper = new LambdaQueryWrapper<>();
+                taskQueryWrapper.eq(CompareTask::getSystemId, systemId);
+                List<CompareTask> matchingTasks = compareTaskService.list(taskQueryWrapper);
+                
+                if (matchingTasks.isEmpty()) {
+                    // 如果没有匹配的任务，返回空结果
+                    return Result.success("查询成功", Map.of("records", List.of(), "total", 0, "current", current, "size", size));
+                } else {
+                    // 获取匹配任务的ID列表
+                    List<Long> taskIds = matchingTasks.stream().map(CompareTask::getId).collect(Collectors.toList());
+                    queryWrapper.in(CompareResult::getTaskId, taskIds);
+                }
+            }
+            
             if (startTime != null && !startTime.trim().isEmpty()) {
                 queryWrapper.ge(CompareResult::getExecuteTime, LocalDateTime.parse(startTime));
             }
@@ -270,6 +304,28 @@ public class CompareController {
                     record.put("createTime", result.getCreateTime());
                     record.put("updateTime", result.getUpdateTime());
                     record.put("errorMessage", result.getErrorMessage());
+                    
+                    // 查询差异类型统计
+                    try {
+                        LambdaQueryWrapper<CompareDiffDetail> diffWrapper = new LambdaQueryWrapper<>();
+                        diffWrapper.eq(CompareDiffDetail::getResultId, result.getId());
+                        List<CompareDiffDetail> diffDetails = compareDiffDetailService.list(diffWrapper);
+                        
+                        long addCount = diffDetails.stream().filter(d -> "ADD".equals(d.getDiffType())).count();
+                        long deleteCount = diffDetails.stream().filter(d -> "DELETE".equals(d.getDiffType())).count();
+                        long modifyCount = diffDetails.stream().filter(d -> "MODIFY".equals(d.getDiffType())).count();
+                        
+                        record.put("addCount", addCount);
+                        record.put("deleteCount", deleteCount);
+                        record.put("modifyCount", modifyCount);
+                        record.put("diffCount", addCount + deleteCount + modifyCount);
+                    } catch (Exception e) {
+                        log.warn("获取差异类型统计失败: resultId={}", result.getId(), e);
+                        record.put("addCount", 0);
+                        record.put("deleteCount", 0);
+                        record.put("modifyCount", 0);
+                        record.put("diffCount", 0);
+                    }
                     
                     // 获取关联的任务信息
                     try {

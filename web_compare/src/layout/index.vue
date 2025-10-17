@@ -125,6 +125,10 @@ export default {
             {
               path: '/system/servers',
               meta: { title: '服务器管理', icon: 'Cpu' }
+            },
+            {
+              path: '/system/schedule',
+              meta: { title: '任务调度', icon: 'Timer' }
             }
           ]
         },
@@ -176,31 +180,19 @@ export default {
           children: [
             {
               path: '/report/dashboard',
-              meta: { title: '仪表板', icon: 'DataBoard' }
+              meta: { title: '总览仪表板', icon: 'DataBoard' }
             },
             {
-              path: '/report/schedule',
-              meta: { title: '任务调度', icon: 'Timer' }
+              path: '/report/compare-report',
+              meta: { title: '比对报告', icon: 'Document' }
             },
             {
-              path: '/report/execution',
-              meta: { title: '执行报告', icon: 'Document' }
+              path: '/report/statistics',
+              meta: { title: '执行统计', icon: 'PieChart' }
             },
             {
-              path: '/report/diff-analysis',
-              meta: { title: '差异分析', icon: 'TrendCharts' }
-            },
-            {
-              path: '/report/system-health',
-              meta: { title: '系统健康', icon: 'CircleCheck' }
-            },
-            {
-              path: '/report/collect-stats',
-              meta: { title: '采集统计', icon: 'PieChart' }
-            },
-            {
-              path: '/report/compare-stats',
-              meta: { title: '比对统计', icon: 'Histogram' }
+              path: '/report/health',
+              meta: { title: '系统监控', icon: 'Monitor' }
             }
           ]
         }

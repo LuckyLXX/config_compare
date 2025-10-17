@@ -96,35 +96,6 @@ export const executionReportApi = {
   }
 }
 
-// 差异分析报告相关API
-export const diffAnalysisApi = {
-  // 获取差异分析报告
-  getDiffAnalysisReports(params) {
-    return request({
-      url: '/report/diff-analysis',
-      method: 'get',
-      params
-    })
-  },
-
-  // 生成差异分析报告
-  generateDiffAnalysisReport(data) {
-    return request({
-      url: '/report/diff-analysis/generate',
-      method: 'post',
-      data
-    })
-  },
-
-  // 获取差异趋势分析
-  getDiffTrends(params) {
-    return request({
-      url: '/report/diff-analysis/trends',
-      method: 'get',
-      params
-    })
-  }
-}
 
 // 系统健康报告相关API
 export const systemHealthApi = {
@@ -186,10 +157,32 @@ export const statisticsApi = {
   }
 }
 
+// 比对报告相关API
+export const compareReportApi = {
+  // 导出比对报告（Excel）
+  exportCompareExcel(data) {
+    return request({
+      url: '/report/compare/export-excel',
+        method: 'post',
+        headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+        data: JSON.stringify(data),
+      responseType: 'blob'
+    })
+  },
+
+  // 获取报告详情数据
+  getReportData(systemId) {
+    return request({
+      url: `/report/compare/data/${systemId}`,
+      method: 'get'
+    })
+  }
+}
+
 export default {
   reportDashboardApi,
   executionReportApi,
-  diffAnalysisApi,
   systemHealthApi,
-  statisticsApi
+  statisticsApi,
+  compareReportApi
 }

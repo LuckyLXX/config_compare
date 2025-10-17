@@ -1,0 +1,50 @@
+2025-10-17 09:43:12 [restartedMain] INFO  com.config.compare.ConfigCompareApplication - Starting ConfigCompareApplication using Java 11.0.9 on luckylxx with PID 24864 (D:\workspace\工作\config_compare\app_compare\target\classes started by li857 in D:\workspace\工作\config_compare\app_compare)
+2025-10-17 09:43:12 [restartedMain] DEBUG com.config.compare.ConfigCompareApplication - Running with Spring Boot v2.7.18, Spring v5.3.31
+2025-10-17 09:43:12 [restartedMain] INFO  com.config.compare.ConfigCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-10-17 09:43:12 [restartedMain] INFO  o.s.b.d.env.DevToolsPropertyDefaultsPostProcessor - Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2025-10-17 09:43:12 [restartedMain] INFO  o.s.b.d.env.DevToolsPropertyDefaultsPostProcessor - For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2025-10-17 09:43:16 [restartedMain] INFO  o.s.boot.web.embedded.tomcat.TomcatWebServer - Tomcat initialized with port(s): 8080 (http)
+2025-10-17 09:43:16 [restartedMain] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2025-10-17 09:43:16 [restartedMain] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.83]
+2025-10-17 09:43:16 [restartedMain] INFO  o.a.c.c.ContainerBase.[Tomcat].[localhost].[/api] - Initializing Spring embedded WebApplicationContext
+2025-10-17 09:43:16 [restartedMain] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3758 ms
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：API -> com.config.compare.collect.handler.ApiCollectHandler
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：APOLLO -> com.config.compare.collect.handler.ApolloCollectHandler
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：COMMAND -> com.config.compare.collect.handler.CommandCollectHandler
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：FILE -> com.config.compare.collect.handler.FileCollectHandler
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 采集处理器管理器初始化完成，共注册4个处理器
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.c.compare.manager.CompareAlgorithmManager - 注册比对算法：JSON -> com.config.compare.compare.algorithm.impl.JsonCompareAlgorithm
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.c.compare.manager.CompareAlgorithmManager - 注册比对算法：TEXT -> com.config.compare.compare.algorithm.impl.TextCompareAlgorithm
+2025-10-17 09:43:16 [restartedMain] INFO  c.c.c.compare.manager.CompareAlgorithmManager - 比对算法管理器初始化完成，共注册2个算法
+2025-10-17 09:43:16 [restartedMain] INFO  c.a.d.s.b.a.DruidDataSourceAutoConfigure - Init DruidDataSource
+2025-10-17 09:43:21 [restartedMain] INFO  com.alibaba.druid.pool.DruidDataSource - {dataSource-1} inited
+2025-10-17 09:43:22 [restartedMain] DEBUG c.b.m.e.spring.MybatisSqlSessionFactoryBean - Parsed mapper file: 'file [D:\workspace\工作\config_compare\app_compare\target\classes\mapper\ConfigCategoryMapper.xml]'
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.impl.StdSchedulerFactory - Using default implementation for ThreadExecutor
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.simpl.SimpleThreadPool - Job execution threads will use class loader of thread: restartedMain
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.core.SchedulerSignalerImpl - Initialized Scheduler Signaller of type: class org.quartz.core.SchedulerSignalerImpl
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Quartz Scheduler v.2.3.2 created.
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.simpl.RAMJobStore - RAMJobStore initialized.
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Scheduler meta-data: Quartz Scheduler (v2.3.2) 'ConfigCompareScheduler' with instanceId 'NON_CLUSTERED'
+  Scheduler class: 'org.quartz.core.QuartzScheduler' - running locally.
+  NOT STARTED.
+  Currently in standby mode.
+  Number of jobs executed: 0
+  Using thread pool 'org.quartz.simpl.SimpleThreadPool' - with 10 threads.
+  Using job-store 'org.quartz.simpl.RAMJobStore' - which does not support persistence. and is not clustered.
+
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.impl.StdSchedulerFactory - Quartz scheduler 'ConfigCompareScheduler' initialized from an externally provided properties instance.
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.impl.StdSchedulerFactory - Quartz scheduler version: 2.3.2
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.core.QuartzScheduler - JobFactory set to: org.springframework.scheduling.quartz.SpringBeanJobFactory@1f506f1d
+2025-10-17 09:43:24 [restartedMain] INFO  o.s.b.d.autoconfigure.OptionalLiveReloadServer - LiveReload server is running on port 35729
+2025-10-17 09:43:24 [restartedMain] INFO  o.s.boot.web.embedded.tomcat.TomcatWebServer - Tomcat started on port(s): 8080 (http) with context path '/api'
+2025-10-17 09:43:24 [restartedMain] INFO  o.s.scheduling.quartz.SchedulerFactoryBean - Starting Quartz Scheduler now
+2025-10-17 09:43:24 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Scheduler ConfigCompareScheduler_$_NON_CLUSTERED started.
+2025-10-17 09:43:24 [scheduling-1] DEBUG c.c.compare.service.impl.TaskSchedulerServiceImpl - 开始检查定时任务...
+2025-10-17 09:43:24 [restartedMain] INFO  com.config.compare.ConfigCompareApplication - Started ConfigCompareApplication in 12.334 seconds (JVM running for 21.968)
+2025-10-17 09:43:24 [restartedMain] INFO  com.config.compare.config.DatabaseUpdateRunner - server_type表结构检查完成
+2025-10-17 09:43:24 [scheduling-1] DEBUG c.c.compare.service.impl.TaskSchedulerServiceImpl - 定时任务检查完成
+2025-10-17 09:43:24 [restartedMain] INFO  com.config.compare.config.DatabaseUpdateRunner - config_category表结构检查完成
+2025-10-17 09:43:24 [restartedMain] DEBUG c.b.mybatisplus.autoconfigure.DdlApplicationRunner -   ...  DDL start create  ...  
+2025-10-17 09:43:24 [restartedMain] DEBUG c.b.mybatisplus.autoconfigure.DdlApplicationRunner -   ...  DDL end create  ...  
+2025-10-17 09:44:24 [scheduling-1] DEBUG c.c.compare.service.impl.TaskSchedulerServiceImpl - 开始检查定时任务...
+2025-10-17 09:44:24 [scheduling-1] DEBUG c.c.compare.service.impl.TaskSchedulerServiceImpl - 定时任务检查完成

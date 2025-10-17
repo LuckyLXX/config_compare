@@ -808,9 +808,28 @@ public class CompareTaskServiceImpl extends ServiceImpl<CompareTaskMapper, Compa
         // 根据基线配置或内容特征确定类型
         // TODO: ConfigBaseline实体类中没有configType字段，暂时返回TEXT
         
-        // 简单的内容类型检测
-        if (collectedContent != null && collectedContent.trim().startsWith("{")) {
-            return "JSON";
+        // 增强的内容类型检测
+        if (collectedContent != null) {
+            String trimmed = collectedContent.trim();
+            
+            // JSON格式检测
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                // 进一步验证是否为有效的JSON
+                try {
+                    objectMapper.readTree(collectedContent);
+                    return "JSON";
+                } catch (Exception e) {
+                    log.debug("内容不是有效的JSON，使用文本比对: {}", e.getMessage());
+                }
+            }
+            
+            // Apollo配置特殊检测 - 检查是否包含Apollo特有的结构
+            if (trimmed.contains("application") &&
+                (trimmed.contains("configServiceUrl") || trimmed.contains("appId") ||
+                 trimmed.contains("cluster") || trimmed.contains("namespaces"))) {
+                log.info("检测到Apollo配置特征，使用JSON比对算法");
+                return "JSON";
+            }
         }
         
         return "TEXT"; // 默认为文本类型
