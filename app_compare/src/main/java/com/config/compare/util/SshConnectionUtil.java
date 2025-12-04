@@ -42,13 +42,16 @@ public class SshConnectionUtil {
             // 创建会话
             session = jsch.getSession(username, host, port != null ? port : 22);
             session.setPassword(password);
-            
+
             // 设置连接属性
             Properties config = new Properties();
             config.put("StrictHostKeyChecking", "no"); // 不检查主机密钥
             config.put("UserKnownHostsFile", "/dev/null"); // 不保存已知主机
+            config.put("PreferredAuthentications", "password,publickey"); // 优先使用密码认证
+            config.put("PubkeyAuthentication", "no"); // 禁用公钥认证
             session.setConfig(config);
-            
+
+
             // 设置超时时间
             session.setTimeout(DEFAULT_TIMEOUT);
             
@@ -65,7 +68,17 @@ public class SshConnectionUtil {
             }
             
         } catch (JSchException e) {
-            log.error("SSH连接测试失败: {}@{}:{}, 错误: {}", username, host, port, e.getMessage());
+            String errorMsg = e.getMessage();
+            String errorType = "其他错误";
+            
+            // 检查是否为Kerberos相关错误
+            if (errorMsg != null && errorMsg.contains("205084")) {
+                errorType = "Kerberos认证失败";
+                log.error("SSH连接测试失败: {}@{}:{}, 错误类型: {}, 详细信息: {}",
+                    username, host, port, errorType, errorMsg);
+            } else {
+                log.error("SSH连接测试失败: {}@{}:{}, 错误: {}", username, host, port, errorMsg);
+            }
             return false;
         } catch (Exception e) {
             log.error("SSH连接测试异常: {}@{}:{}", username, host, port, e);

@@ -4,20 +4,15 @@ import { ElMessage } from 'element-plus'
 // 创建axios实例
 const service = axios.create({
   baseURL: '/api', // api的base_url
-  timeout: 15000 // 请求超时时间
+  timeout: 300000 // 请求超时时间（5分钟，支持AI长时间处理）
 })
 
 // request拦截器
 service.interceptors.request.use(
   config => {
-    // 添加调试日志
-    console.log('[DEBUG] 请求拦截器 - 请求配置:', {
-      url: config.baseURL + config.url,
-      method: config.method,
-      params: config.params,
-      data: config.data,
-      headers: config.headers
-    })
+    // 添加调试日志（避免打印大数据）
+    const dataSize = config.data ? JSON.stringify(config.data).length : 0
+    console.log('[DEBUG] 请求:', config.method?.toUpperCase(), config.url, dataSize > 500 ? `(数据大小: ${dataSize}字符)` : config.data)
     
     // 在发送请求之前做一些处理
     if (config.method === 'post' || config.method === 'put') {

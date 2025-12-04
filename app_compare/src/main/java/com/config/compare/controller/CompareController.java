@@ -30,10 +30,15 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.config.compare.compare.model.CompareContext;
+import com.config.compare.compare.model.CompareResultModel;
+import com.config.compare.compare.model.AlignedLine;
+import com.config.compare.compare.manager.CompareAlgorithmManager;
 
 /**
  * 比对管理Controller（简化版本）
@@ -57,6 +62,7 @@ public class CompareController {
     private final ConfigBaselineService configBaselineService;
     private final CollectResultEntityService collectResultEntityService;
     private final SystemInfoService systemInfoService;
+    private final CompareAlgorithmManager compareAlgorithmManager; // 【新增】用于生成对齐行数据
 
     // ==================== 比对任务相关接口 ====================
     
@@ -339,6 +345,20 @@ public class CompareController {
                         record.put("taskName", "未知任务");
                     }
                     
+                    // 获取关联的基线信息（用于获取serverTypeId、categoryId和baselineName）
+                    try {
+                        ConfigBaseline baseline = configBaselineService.getById(result.getBaselineId());
+                        if (baseline != null) {
+                            record.put("serverTypeId", baseline.getServerTypeId());
+                            record.put("categoryId", baseline.getCategoryId());
+                            record.put("categoryName", baseline.getFileName() != null ? 
+                                baseline.getFileName().replace(".txt", "") : "未知配置");
+                            record.put("baselineName", baseline.getBaselineName());  // 【新增】基线名称
+                        }
+                    } catch (Exception e) {
+                        log.warn("获取基线信息失败: baselineId={}", result.getBaselineId(), e);
+                    }
+                    
                     // 获取关联的服务器信息
                     try {
                         ServerInstance server = serverInstanceService.getById(result.getServerInstanceId());
@@ -441,9 +461,17 @@ public class CompareController {
                 ConfigBaseline baseline = configBaselineService.getById(compareResult.getBaselineId());
                 if (baseline != null) {
                     baselineContent = baseline.getConfigContent();
+                    log.info("🔍 获取基线内容成功: baselineId={}, 内容长度={}",
+                            compareResult.getBaselineId(),
+                            baselineContent != null ? baselineContent.length() : 0);
+                    log.debug("🔍 基线内容前500字符: {}",
+                            baselineContent != null && baselineContent.length() > 500 ?
+                            baselineContent.substring(0, 500) + "..." : baselineContent);
+                } else {
+                    log.warn("🔍 基线配置不存在: baselineId={}", compareResult.getBaselineId());
                 }
             } catch (Exception e) {
-                log.warn("获取基线内容失败: baselineId={}", compareResult.getBaselineId(), e);
+                log.error("🔍 获取基线内容失败: baselineId={}", compareResult.getBaselineId(), e);
             }
             
             // 获取当前内容
@@ -453,10 +481,20 @@ public class CompareController {
                     CollectResultEntity collectResult = collectResultEntityService.getById(compareResult.getCollectResultId());
                     if (collectResult != null) {
                         currentContent = collectResult.getCollectContent();
+                        log.info("🔍 获取当前内容成功: collectResultId={}, 内容长度={}",
+                                compareResult.getCollectResultId(),
+                                currentContent != null ? currentContent.length() : 0);
+                        log.debug("🔍 当前内容前500字符: {}",
+                                currentContent != null && currentContent.length() > 500 ?
+                                currentContent.substring(0, 500) + "..." : currentContent);
+                    } else {
+                        log.warn("🔍 采集结果不存在: collectResultId={}", compareResult.getCollectResultId());
                     }
+                } else {
+                    log.warn("🔍 采集结果ID为空: collectResultId={}", compareResult.getCollectResultId());
                 }
             } catch (Exception e) {
-                log.warn("获取当前内容失败: collectResultId={}", compareResult.getCollectResultId(), e);
+                log.error("🔍 获取当前内容失败: collectResultId={}", compareResult.getCollectResultId(), e);
             }
             
             Map<String, Object> result = new HashMap<>();
@@ -466,6 +504,45 @@ public class CompareController {
             result.put("size", diffPage.getSize());
             result.put("baselineContent", baselineContent);
             result.put("currentContent", currentContent);
+            
+            // 【新增】重新生成 alignedLines 数据用于前端显示
+            List<Object> alignedLines = null;
+            if (!baselineContent.isEmpty() && !currentContent.isEmpty()) {
+                try {
+                    CompareContext context = new CompareContext();
+                    context.setBaselineContent(baselineContent);
+                    context.setCurrentContent(currentContent);
+                    context.setContentType("TEXT"); // 设置内容类型为TEXT
+                    
+                    // 执行比对算法获取完整结果(包括 alignedLines)
+                    CompareResultModel compareModel = compareAlgorithmManager.getAlgorithm("TEXT").compare(context);
+                    
+                    if (compareModel != null && compareModel.getAlignedLines() != null) {
+                        alignedLines = new ArrayList<>(compareModel.getAlignedLines());
+                        log.info("✅ 生成对齐行数据: {} 行", alignedLines.size());
+                        
+                        // 【调试】打印前20行的对齐信息
+                        for (int idx = 0; idx < Math.min(20, alignedLines.size()); idx++) {
+                            AlignedLine line = (AlignedLine) alignedLines.get(idx);
+                            log.info("行{}: baseline[{}]=「{}」, current[{}]=「{}」, type={}", 
+                                idx + 1,
+                                line.getBaselineLineNumber(), 
+                                line.getBaselineContent() != null && line.getBaselineContent().length() > 30 
+                                    ? line.getBaselineContent().substring(0, 30) + "..." 
+                                    : line.getBaselineContent(),
+                                line.getCurrentLineNumber(),
+                                line.getCurrentContent() != null && line.getCurrentContent().length() > 30
+                                    ? line.getCurrentContent().substring(0, 30) + "..."
+                                    : line.getCurrentContent(),
+                                line.getDiffType()
+                            );
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("❌ 生成对齐行数据失败", e);
+                }
+            }
+            result.put("alignedLines", alignedLines != null ? alignedLines : new ArrayList<>());
             
             return Result.success("查询成功", result);
         } catch (Exception e) {

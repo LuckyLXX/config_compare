@@ -75,11 +75,7 @@
         <el-main class="app-main">
           <div class="app-main-container">
             <router-view v-slot="{ Component, route }">
-              <transition name="fade-transform" mode="out-in">
-                <keep-alive>
-                  <component :is="Component" :key="route.path" />
-                </keep-alive>
-              </transition>
+              <component :is="Component" :key="route.path" />
             </router-view>
           </div>
         </el-main>
@@ -89,9 +85,10 @@
 </template>
 
 <script>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SidebarItem from './components/SidebarItem.vue'
+import { externalLinkApi } from '@/api/externalLink'
 
 export default {
   name: 'Layout',
@@ -104,11 +101,24 @@ export default {
 
     const isCollapse = ref(false)
     const avatarUrl = ref('')
+    const externalLinks = ref([])
+
+    // 获取启用的外部链接
+    const fetchExternalLinks = async () => {
+      try {
+        const res = await externalLinkApi.getEnabledLinks()
+        if (res.code === 200) {
+          externalLinks.value = res.data || []
+        }
+      } catch (error) {
+        console.error('获取外部链接失败:', error)
+      }
+    }
 
     // 获取路由配置 - 只获取顶级路由避免重复
     const routes = computed(() => {
-      // 直接导入路由配置，避免使用 router.getRoutes() 导致的重复
-      return [
+      // 基础路由配置
+      const baseRoutes = [
         {
           path: '/dashboard',
           meta: { title: '概览', icon: 'House' },
@@ -125,10 +135,6 @@ export default {
             {
               path: '/system/servers',
               meta: { title: '服务器管理', icon: 'Cpu' }
-            },
-            {
-              path: '/system/schedule',
-              meta: { title: '任务调度', icon: 'Timer' }
             }
           ]
         },
@@ -186,17 +192,65 @@ export default {
               path: '/report/compare-report',
               meta: { title: '比对报告', icon: 'Document' }
             },
+          ]
+        },
+        {
+          path: '/data-process',
+          meta: { title: '数据处理中心', icon: 'MagicStick' },
+          alwaysShow: true,
+          children: [
             {
-              path: '/report/statistics',
-              meta: { title: '执行统计', icon: 'PieChart' }
-            },
-            {
-              path: '/report/health',
-              meta: { title: '系统监控', icon: 'Monitor' }
+              path: '/data-process/list',
+              meta: { title: '任务列表', icon: 'List' }
             }
           ]
         }
       ]
+
+      // 构建外部链接菜单
+      if (externalLinks.value.length > 0) {
+        const externalLinkChildren = externalLinks.value.map(link => ({
+          path: link.openType === 1 ? `/external-link/view/${link.id}` : link.linkUrl,
+          meta: { 
+            title: link.linkName, 
+            icon: link.icon || 'Link',
+            isExternal: link.openType === 2,
+            externalUrl: link.linkUrl
+          }
+        }))
+
+        // 添加链接管理入口
+        externalLinkChildren.push({
+          path: '/external-link/manage',
+          meta: { title: '链接管理', icon: 'Setting' }
+        })
+
+        baseRoutes.push({
+          path: '/external-link',
+          meta: { title: '外部链接', icon: 'Link' },
+          alwaysShow: true,
+          children: externalLinkChildren
+        })
+      } else {
+        // 没有外部链接时只显示链接管理
+        baseRoutes.push({
+          path: '/external-link',
+          meta: { title: '外部链接', icon: 'Link' },
+          alwaysShow: true,
+          children: [
+            {
+              path: '/external-link/manage',
+              meta: { title: '链接管理', icon: 'Setting' }
+            }
+          ]
+        })
+      }
+
+      return baseRoutes
+    })
+
+    onMounted(() => {
+      fetchExternalLinks()
     })
 
     // 当前激活的菜单

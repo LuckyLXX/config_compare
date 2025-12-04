@@ -75,6 +75,21 @@ public class CompareDiffDetail {
      * 差异路径
      */
     private String diffPath;
+    
+    /**
+     * 基线行号
+     */
+    // private Integer baselineLineNumber;
+    
+    /**
+     * 当前行号
+     */
+    // private Integer currentLineNumber;
+    
+    /**
+     * 行内差异信息（JSON格式）
+     */
+    // private String inlineDiffJson;
 
     /**
      * 创建时间

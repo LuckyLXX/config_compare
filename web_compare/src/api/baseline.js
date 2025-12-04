@@ -97,6 +97,41 @@ export const baselineApi = {
       method: 'get',
       responseType: 'blob'
     })
+  },
+
+  // 获取版本历史
+  getVersionHistory(systemId, serverTypeId, categoryId, baselineName) {
+    return request({
+      url: '/baselines/version-history',
+      method: 'get',
+      params: { systemId, serverTypeId, categoryId, baselineName }
+    })
+  },
+
+  // 晋级采集版本为基线
+  promoteToBaseline(params) {
+    return request({
+      url: '/baselines/promote',
+      method: 'post',
+      params: {
+        systemId: params.systemId,
+        serverTypeId: params.serverTypeId,
+        categoryId: params.categoryId,
+        baselineName: params.baselineName,
+        currentContent: params.currentContent,
+        fileName: params.fileName,
+        description: params.description
+      }
+    })
+  },
+
+  // 切换到指定历史版本
+  switchToVersion(baselineId, reason) {
+    return request({
+      url: `/baselines/${baselineId}/switch`,
+      method: 'put',
+      params: { reason }
+    })
   }
 }
 
@@ -117,6 +152,15 @@ export const categoryApi = {
       url: '/categories',
       method: 'get',
       params
+    })
+  },
+
+  // 分页查询配置分类（支持筛选）
+  getCategoryPage(params) {
+    return request({
+      url: '/categories/page',
+      method: 'post',
+      data: params
     })
   },
 

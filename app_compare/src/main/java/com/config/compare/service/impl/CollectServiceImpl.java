@@ -64,9 +64,23 @@ public class CollectServiceImpl implements CollectService {
         try {
             // 获取目标服务器列表
             List<ServerInstance> servers = getTaskTargetServers(task);
+            
+            // 对于HTTP(API)类型模板，如果没有选择服务器，创建一个虚拟服务器实例
             if (servers.isEmpty()) {
-                log.error("任务无可用的目标服务器：{}", task.getId());
-                return null;
+                CollectTemplate template = collectTemplateService.getById(task.getTemplateId());
+                if (template != null && "API".equals(template.getTemplateType())) {
+                    // HTTP类型可以不需要服务器，创建虚拟实例
+                    ServerInstance virtualServer = new ServerInstance();
+                    virtualServer.setId(0L);
+                    virtualServer.setInstanceName("HTTP直连");
+                    virtualServer.setServerIp(null); // 不替换URL中的host
+                    virtualServer.setStatus(1);
+                    servers.add(virtualServer);
+                    log.info("HTTP类型任务未选择服务器，使用模板原始URL执行");
+                } else {
+                    log.error("任务无可用的目标服务器：{}", task.getId());
+                    return null;
+                }
             }
             
             // 创建执行记录
@@ -377,6 +391,28 @@ public class CollectServiceImpl implements CollectService {
                         log.info("合并后的Apollo配置: {}", configParams);
                     }
                     
+                    // 对于API(HTTP)类型，如果服务器实例有IP，则替换URL中的host部分
+                    if ("API".equals(template.getTemplateType())) {
+                        if (configParams == null) {
+                            configParams = new HashMap<>();
+                        }
+                        
+                        String originalUrl = (String) configParams.get("url");
+                        String serverIp = server.getServerIp();
+                        
+                        if (StringUtils.hasText(originalUrl) && StringUtils.hasText(serverIp)) {
+                            String replacedUrl = replaceUrlHost(originalUrl, serverIp);
+                            if (!originalUrl.equals(replacedUrl)) {
+                                configParams.put("url", replacedUrl);
+                                log.info("HTTP采集URL替换 - 服务器: {}, 原URL: {}, 新URL: {}", 
+                                        server.getInstanceName(), originalUrl, replacedUrl);
+                            }
+                        } else if (!StringUtils.hasText(serverIp)) {
+                            log.info("HTTP采集使用模板原始URL - 服务器: {} 未配置IP, URL: {}", 
+                                    server.getInstanceName(), originalUrl);
+                        }
+                    }
+                    
                     context.setConfigParams(configParams);
                     
                     CollectResult result = executeSingleCollect(context);
@@ -410,6 +446,44 @@ public class CollectServiceImpl implements CollectService {
 
             // 触发关联的比对任务（仅触发与该采集任务关联、启用且为触发执行的比对任务）
             triggerRelatedCompareTasks(task.getId(), executeId, successCount, servers.size());
+        }
+    }
+    
+    /**
+     * 替换URL中的host部分为指定的IP地址
+     * 例如: http://config-service.example.com:8080/api/config -> http://192.168.1.100:8080/api/config
+     * 
+     * @param originalUrl 原始URL
+     * @param newHost 新的host（IP地址）
+     * @return 替换后的URL
+     */
+    private String replaceUrlHost(String originalUrl, String newHost) {
+        try {
+            java.net.URL url = new java.net.URL(originalUrl);
+            String protocol = url.getProtocol();
+            int port = url.getPort();
+            String path = url.getPath();
+            String query = url.getQuery();
+            
+            StringBuilder newUrl = new StringBuilder();
+            newUrl.append(protocol).append("://").append(newHost);
+            
+            if (port != -1) {
+                newUrl.append(":").append(port);
+            }
+            
+            if (StringUtils.hasText(path)) {
+                newUrl.append(path);
+            }
+            
+            if (StringUtils.hasText(query)) {
+                newUrl.append("?").append(query);
+            }
+            
+            return newUrl.toString();
+        } catch (Exception e) {
+            log.warn("URL解析失败，使用原始URL: {}, 错误: {}", originalUrl, e.getMessage());
+            return originalUrl;
         }
     }
 

@@ -1,0 +1,130 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.config:config-compare >----------------------
+[INFO] Building config-compare 1.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:2.7.18:run (default-cli) > test-compile @ config-compare >>>
+[WARNING] The artifact mysql:mysql-connector-java:jar:8.0.33 has been relocated to com.mysql:mysql-connector-j:jar:8.0.33: MySQL Connector/J artifacts moved to reverse-DNS compliant Maven 2+ coordinates.
+[INFO] 
+[INFO] --- resources:3.3.0:resources (default-resources) @ config-compare ---
+[INFO] Copying 4 resources
+[INFO] 
+[INFO] --- compiler:3.8.1:compile (default-compile) @ config-compare ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 132 source files to D:\workspace\工作\config_compare\app_compare\target\classes
+[INFO] /D:/workspace/工作/config_compare/app_compare/src/main/java/com/config/compare/compare/model/CompareResultModel.java: 某些输入文件使用或覆盖了已过时的 API。
+[INFO] /D:/workspace/工作/config_compare/app_compare/src/main/java/com/config/compare/compare/model/CompareResultModel.java: 有关详细信息, 请使用 -Xlint:deprecation 重新编译。
+[INFO] /D:/workspace/工作/config_compare/app_compare/src/main/java/com/config/compare/service/impl/CompareReportServiceImpl.java: 某些输入文件使用了未经检查或不安全的操作。
+[INFO] /D:/workspace/工作/config_compare/app_compare/src/main/java/com/config/compare/service/impl/CompareReportServiceImpl.java: 有关详细信息, 请使用 -Xlint:unchecked 重新编译。
+[INFO] 
+[INFO] --- resources:3.3.0:testResources (default-testResources) @ config-compare ---
+[INFO] skip non existing resourceDirectory D:\workspace\工作\config_compare\app_compare\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.8.1:testCompile (default-testCompile) @ config-compare ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 1 source file to D:\workspace\工作\config_compare\app_compare\target\test-classes
+[INFO] 
+[INFO] <<< spring-boot:2.7.18:run (default-cli) < test-compile @ config-compare <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:2.7.18:run (default-cli) @ config-compare ---
+[INFO] Attaching agents: []
+16:32:53.407 [main] INFO org.springframework.boot.devtools.restart.RestartApplicationListener - Restart enabled irrespective of application packaging due to System property 'spring.devtools.restart.enabled' being set to true
+16:32:53.453 [Thread-0] DEBUG org.springframework.boot.devtools.restart.classloader.RestartClassLoader - Created RestartClassLoader org.springframework.boot.devtools.restart.classloader.RestartClassLoader@64e3518b
+16:32:53.464 [restartedMain] INFO org.springframework.boot.devtools.restart.RestartApplicationListener - Restart enabled irrespective of application packaging due to System property 'spring.devtools.restart.enabled' being set to true
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::               (v2.7.18)
+
+2025-11-05 16:32:53 [restartedMain] INFO  com.config.compare.ConfigCompareApplication - Starting ConfigCompareApplication using Java 11.0.9 on luckylxx with PID 43680 (D:\workspace\工作\config_compare\app_compare\target\classes started by li857 in D:\workspace\工作\config_compare\app_compare)
+2025-11-05 16:32:53 [restartedMain] DEBUG com.config.compare.ConfigCompareApplication - Running with Spring Boot v2.7.18, Spring v5.3.31
+2025-11-05 16:32:53 [restartedMain] INFO  com.config.compare.ConfigCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-05 16:32:53 [restartedMain] INFO  o.s.boot.devtools.restart.ChangeableUrls - The Class-Path manifest attribute in D:\jetbrains\maven\Repository\com\oracle\database\jdbc\ojdbc8\19.3.0.0\ojdbc8-19.3.0.0.jar referenced one or more files that do not exist: file:/D:/jetbrains/maven/Repository/com/oracle/database/jdbc/ojdbc8/19.3.0.0/oraclepki.jar
+2025-11-05 16:32:53 [restartedMain] INFO  o.s.boot.devtools.restart.ChangeableUrls - The Class-Path manifest attribute in D:\jetbrains\maven\Repository\com\oracle\database\security\oraclepki\21.5.0.0\oraclepki-21.5.0.0.jar referenced one or more files that do not exist: file:/D:/jetbrains/maven/Repository/com/oracle/database/security/oraclepki/21.5.0.0/osdt_core.jar,file:/D:/jetbrains/maven/Repository/com/oracle/database/security/oraclepki/21.5.0.0/osdt_cert.jar,file:/D:/jetbrains/maven/Repository/com/oracle/database/security/oraclepki/oracle.osdt/osdt_core.jar,file:/D:/jetbrains/maven/Repository/com/oracle/database/security/oraclepki/oracle.osdt/osdt_cert.jar
+2025-11-05 16:32:53 [restartedMain] INFO  o.s.b.d.env.DevToolsPropertyDefaultsPostProcessor - Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2025-11-05 16:32:53 [restartedMain] INFO  o.s.b.d.env.DevToolsPropertyDefaultsPostProcessor - For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2025-11-05 16:32:55 [restartedMain] INFO  o.s.boot.web.embedded.tomcat.TomcatWebServer - Tomcat initialized with port(s): 8080 (http)
+2025-11-05 16:32:55 [restartedMain] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2025-11-05 16:32:55 [restartedMain] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.83]
+2025-11-05 16:32:55 [restartedMain] INFO  o.a.c.c.ContainerBase.[Tomcat].[localhost].[/api] - Initializing Spring embedded WebApplicationContext
+2025-11-05 16:32:55 [restartedMain] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1770 ms
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：API -> com.config.compare.collect.handler.ApiCollectHandler
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：APOLLO -> com.config.compare.collect.handler.ApolloCollectHandler
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：COMMAND -> com.config.compare.collect.handler.CommandCollectHandler
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 注册采集处理器：FILE -> com.config.compare.collect.handler.FileCollectHandler
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.compare.collect.manager.CollectHandlerManager - 采集处理器管理器初始化完成，共注册4个处理器
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.c.compare.manager.CompareAlgorithmManager - 注册比对算法：JSON -> com.config.compare.compare.algorithm.impl.JsonCompareAlgorithm
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.c.compare.manager.CompareAlgorithmManager - 注册比对算法：TEXT -> com.config.compare.compare.algorithm.impl.TextCompareAlgorithm
+2025-11-05 16:32:55 [restartedMain] INFO  c.c.c.compare.manager.CompareAlgorithmManager - 比对算法管理器初始化完成，共注册2个算法
+2025-11-05 16:32:55 [restartedMain] INFO  com.config.compare.config.DynamicDataSourceConfig - 配置MySQL数据源: jdbc:mysql://117.72.150.127:3306/config_compare?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+2025-11-05 16:32:55 [restartedMain] INFO  com.config.compare.config.DatabaseDialectConfig - 当前数据库类型: MYSQL
+2025-11-05 16:33:00 [restartedMain] INFO  com.alibaba.druid.pool.DruidDataSource - {dataSource-1} inited
+2025-11-05 16:33:00 [restartedMain] INFO  com.config.compare.config.DatabaseDialectConfig - 数据库连接测试成功
+Logging initialized using 'class org.apache.ibatis.logging.stdout.StdOutImpl' adapter.
+2025-11-05 16:33:00 [restartedMain] DEBUG c.b.m.e.spring.MybatisSqlSessionFactoryBean - Parsed mapper file: 'file [D:\workspace\工作\config_compare\app_compare\target\classes\mapper\ConfigCategoryMapper.xml]'
+2025-11-05 16:33:00 [restartedMain] DEBUG c.b.m.e.spring.MybatisSqlSessionFactoryBean - Parsed mapper file: 'file [D:\workspace\工作\config_compare\app_compare\target\classes\mapper\oracle\ConfigCategoryMapper.xml]'
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        3.5.5 
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.impl.StdSchedulerFactory - Using default implementation for ThreadExecutor
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.SchedulerSignalerImpl - Initialized Scheduler Signaller of type: class org.quartz.core.SchedulerSignalerImpl
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Quartz Scheduler v.2.3.2 created.
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.simpl.RAMJobStore - RAMJobStore initialized.
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Scheduler meta-data: Quartz Scheduler (v2.3.2) 'quartzScheduler' with instanceId 'NON_CLUSTERED'
+  Scheduler class: 'org.quartz.core.QuartzScheduler' - running locally.
+  NOT STARTED.
+  Currently in standby mode.
+  Number of jobs executed: 0
+  Using thread pool 'org.quartz.simpl.SimpleThreadPool' - with 10 threads.
+  Using job-store 'org.quartz.simpl.RAMJobStore' - which does not support persistence. and is not clustered.
+
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.impl.StdSchedulerFactory - Quartz scheduler 'quartzScheduler' initialized from an externally provided properties instance.
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.impl.StdSchedulerFactory - Quartz scheduler version: 2.3.2
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.QuartzScheduler - JobFactory set to: org.springframework.scheduling.quartz.SpringBeanJobFactory@21f40afc
+2025-11-05 16:33:01 [restartedMain] WARN  o.s.b.d.autoconfigure.OptionalLiveReloadServer - Unable to start LiveReload server
+2025-11-05 16:33:01 [restartedMain] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'; nested exception is org.springframework.boot.web.server.PortInUseException: Port 8080 is already in use
+2025-11-05 16:33:01 [restartedMain] INFO  o.s.scheduling.quartz.SchedulerFactoryBean - Shutting down Quartz Scheduler
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Scheduler quartzScheduler_$_NON_CLUSTERED shutting down.
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Scheduler quartzScheduler_$_NON_CLUSTERED paused.
+2025-11-05 16:33:01 [restartedMain] INFO  org.quartz.core.QuartzScheduler - Scheduler quartzScheduler_$_NON_CLUSTERED shutdown complete.
+2025-11-05 16:33:01 [restartedMain] INFO  com.alibaba.druid.pool.DruidDataSource - {dataSource-1} closing ...
+2025-11-05 16:33:01 [restartedMain] INFO  com.alibaba.druid.pool.DruidDataSource - {dataSource-1} closed
+2025-11-05 16:33:01 [restartedMain] INFO  org.apache.catalina.core.StandardService - Stopping service [Tomcat]
+2025-11-05 16:33:01 [restartedMain] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-11-05 16:33:01 [restartedMain] ERROR o.s.b.diagnostics.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  25.589 s
+[INFO] Finished at: 2025-11-05T16:33:02+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:2.7.18:run (default-cli) on project config-compare: Application finished with exit code: 1 -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException

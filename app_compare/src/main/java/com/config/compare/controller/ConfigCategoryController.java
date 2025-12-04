@@ -1,7 +1,7 @@
 package com.config.compare.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.config.compare.common.request.PageRequest;
+import com.config.compare.common.request.CategoryPageRequest;
 import com.config.compare.common.result.Result;
 import com.config.compare.entity.ConfigCategory;
 import com.config.compare.service.ConfigCategoryService;
@@ -35,8 +35,11 @@ public class ConfigCategoryController {
 
     @Operation(summary = "分页查询配置分类")
     @PostMapping("/page")
-    public Result<IPage<ConfigCategory>> pageQuery(@Valid @RequestBody PageRequest pageRequest) {
+    public Result<IPage<ConfigCategory>> pageQuery(@Valid @RequestBody CategoryPageRequest pageRequest) {
         try {
+            log.info("收到分页查询请求: categoryName={}, categoryCode={}, status={}, current={}, size={}",
+                pageRequest.getCategoryName(), pageRequest.getCategoryCode(), 
+                pageRequest.getStatus(), pageRequest.getCurrent(), pageRequest.getSize());
             IPage<ConfigCategory> result = configCategoryService.pageQuery(pageRequest);
             return Result.success("查询成功", result);
         } catch (Exception e) {

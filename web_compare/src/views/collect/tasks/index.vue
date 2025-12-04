@@ -291,10 +291,10 @@
             <el-form-item label="服务器实例" prop="serverInstanceIds">
               <el-select
                 v-model="form.serverInstanceIds"
-                placeholder="请选择服务器实例"
+                placeholder="请选择服务器实例（可选）"
                 multiple
                 style="width: 100%"
-                :disabled="serverInstanceList.length === 0"
+                clearable
               >
                 <el-option
                   v-for="server in serverInstanceList"
@@ -304,7 +304,7 @@
                 />
               </el-select>
               <div class="field-tip">
-                可以直接选择具体的服务器实例，优先级高于服务器类型
+                可以直接选择具体的服务器实例，优先级高于服务器类型。对于HTTP接口类型模板，服务器实例的IP将替换模板URL中的域名/IP
               </div>
             </el-form-item>
           </el-col>
@@ -410,7 +410,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { collectTaskApi, collectTemplateApi } from '@/api/collect'
 import { systemApi } from '@/api/system'
@@ -555,12 +555,19 @@ export default {
     // 获取系统列表
     const getSystemList = async () => {
       try {
+        console.log('[DEBUG] 采集任务页面开始获取系统列表...')
         const response = await systemApi.getAllSystemList()
+        console.log('[DEBUG] 采集任务页面系统列表API响应:', response)
+        
         // 系统列表API返回的是直接的List，不是分页格式
         systemList.value = response.data || []
-        console.log('获取到的系统列表:', systemList.value) // 调试日志
+        console.log('[DEBUG] 采集任务页面获取到的系统列表:', systemList.value)
+        
+        // 强制触发Vue响应式更新
+        await new Promise(resolve => setTimeout(resolve, 0))
       } catch (error) {
         console.error('获取系统列表失败:', error)
+        systemList.value = []
       }
     }
     
@@ -862,7 +869,7 @@ export default {
       
       validatingCron.value = true
       try {
-        const response = await fetch('/api/schedule/validate-cron', {
+        const response = await fetch('/api/utils/validate-cron', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -882,7 +889,7 @@ export default {
           // 如果有效，获取下次执行时间
           if (result.data) {
             try {
-              const nextResponse = await fetch('/api/schedule/next-execution', {
+              const nextResponse = await fetch('/api/utils/next-execution', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json'
@@ -1022,11 +1029,22 @@ export default {
     
     // 初始化
     onMounted(async () => {
-      await Promise.all([
-        getTaskList(),
-        getSystemList(),
-        getTemplateList()
-      ])
+      console.log('[DEBUG] 采集任务页面组件挂载，开始加载数据...')
+      // 顺序加载数据，避免竞争条件
+      try {
+        await getSystemList() // 先加载系统列表，确保下拉框有数据
+        await getTemplateList()
+        await getTaskList()
+        console.log('[DEBUG] 采集任务页面数据加载完成')
+      } catch (error) {
+        console.error('采集任务页面数据加载失败:', error)
+      }
+    })
+    
+    // 页面从缓存恢复时刷新数据
+    onActivated(() => {
+      console.log('[DEBUG] 采集任务页面激活，刷新任务列表')
+      getTaskList()
     })
     
     return {

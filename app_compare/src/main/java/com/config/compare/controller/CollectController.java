@@ -123,7 +123,12 @@ public class CollectController {
     @PostMapping("/templates/{id}/test")
     public Result<Map<String, Object>> testTemplate(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         try {
-            Long serverId = Long.valueOf(request.get("serverId").toString());
+            // serverId 可以为 null（HTTP类型可以不选择服务器直接测试）
+            Long serverId = null;
+            Object serverIdObj = request.get("serverId");
+            if (serverIdObj != null && !"".equals(serverIdObj.toString().trim())) {
+                serverId = Long.valueOf(serverIdObj.toString());
+            }
             
             Map<String, Object> testResult;
             
@@ -133,7 +138,10 @@ public class CollectController {
                 String templateContent = request.get("config").toString();
                 testResult = collectTemplateService.testTemplateWithConfig(templateType, templateContent, serverId);
             } else {
-                // 否则使用已保存的模板测试
+                // 否则使用已保存的模板测试（此时必须有 serverId）
+                if (serverId == null) {
+                    return Result.error("请选择测试服务器");
+                }
                 testResult = collectTemplateService.testTemplate(id, serverId);
             }
             

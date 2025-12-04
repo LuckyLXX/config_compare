@@ -64,8 +64,10 @@ public class JsonCompareAlgorithm implements CompareAlgorithm {
 
     @Override
     public boolean supports(String contentType) {
-        return "JSON".equalsIgnoreCase(contentType) ||
-               "APPLICATION_JSON".equalsIgnoreCase(contentType);
+        // 暂时禁用JSON结构化比对，统一使用文本比对
+        // return "JSON".equalsIgnoreCase(contentType) ||
+        //        "APPLICATION_JSON".equalsIgnoreCase(contentType);
+        return false;
     }
 
     @Override

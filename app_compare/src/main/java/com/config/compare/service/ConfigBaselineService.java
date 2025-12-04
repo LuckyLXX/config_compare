@@ -2,7 +2,7 @@ package com.config.compare.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.config.compare.common.request.PageRequest;
+import com.config.compare.common.request.BaselinePageRequest;
 import com.config.compare.entity.ConfigBaseline;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public interface ConfigBaselineService extends IService<ConfigBaseline> {
      * @param pageRequest 分页请求参数
      * @return 分页结果
      */
-    IPage<ConfigBaseline> pageQuery(PageRequest pageRequest);
+    IPage<ConfigBaseline> pageQuery(BaselinePageRequest pageRequest);
 
     /**
      * 根据系统ID、服务器类型ID和配置分类ID查询基线列表
@@ -111,12 +111,59 @@ public interface ConfigBaselineService extends IService<ConfigBaseline> {
     String compareBaselines(Long baseline1Id, Long baseline2Id);
 
     /**
-     * 获取基线版本历史
+     * 获取基线版本历史（包含归档版本）
      * 
      * @param systemId 系统ID
      * @param serverTypeId 服务器类型ID
      * @param categoryId 配置分类ID
+     * @param baselineName 基线名称（用于精确匹配同一基线的不同版本）
      * @return 版本历史
      */
-    List<ConfigBaseline> getVersionHistory(Long systemId, Long serverTypeId, Long categoryId);
+    List<ConfigBaseline> getVersionHistory(Long systemId, Long serverTypeId, Long categoryId, String baselineName);
+    
+    /**
+     * 获取默认基线（不依赖服务器类型）
+     *
+     * @param systemId 系统ID
+     * @param categoryId 配置分类ID
+     * @return 默认基线
+     */
+    ConfigBaseline getDefaultBaselineWithoutServerType(Long systemId, Long categoryId);
+    
+    /**
+     * 生成基线版本号
+     * 基于时间戳格式: V + yyyyMMddHHmmss
+     * 
+     * @param systemId 系统ID
+     * @param serverTypeId 服务器类型ID
+     * @param categoryId 配置分类ID
+     * @return 生成的版本号
+     */
+    String generateVersion(Long systemId, Long serverTypeId, Long categoryId);
+    
+    /**
+     * 晋级采集版本为基线
+     * 将当前默认基线归档,创建新基线并设置为默认
+     * 
+     * @param systemId 系统ID
+     * @param serverTypeId 服务器类型ID
+     * @param categoryId 配置分类ID
+     * @param baselineName 基线名称（用于唯一标识）
+     * @param currentContent 采集版本内容
+     * @param fileName 文件名
+     * @param description 描述
+     * @return 新创建的基线
+     */
+    ConfigBaseline promoteToBaseline(Long systemId, Long serverTypeId, Long categoryId, String baselineName,
+                                     String currentContent, String fileName, String description);
+    
+    /**
+     * 切换到指定历史版本
+     * 将当前默认基线归档,将指定历史版本设置为默认
+     * 
+     * @param baselineId 基线ID
+     * @param reason 切换原因
+     * @return 切换结果
+     */
+    boolean switchToVersion(Long baselineId, String reason);
 }

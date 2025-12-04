@@ -15,6 +15,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * SFTP文件采集处理器
@@ -53,6 +54,15 @@ public class FileCollectHandler extends AbstractCollectHandler {
             session = jsch.getSession(server.getUsername(), server.getServerIp(), server.getSshPort());
             session.setPassword(server.getPassword());
             session.setConfig("StrictHostKeyChecking", "no");
+            
+            // 设置认证方式，优先使用密码认证，避免Kerberos认证问题
+            Properties config = new Properties();
+            config.put("PreferredAuthentications", "password,publickey");
+            config.put("PubkeyAuthentication", "no");
+            config.put("GSSAPIAuthentication", "no");
+            config.put("KerberosAuthentication", "no");
+            session.setConfig(config);
+            
             session.setTimeout(30000);
             session.connect();
             
@@ -163,6 +173,15 @@ public class FileCollectHandler extends AbstractCollectHandler {
             session = jsch.getSession(server.getUsername(), server.getServerIp(), server.getSshPort());
             session.setPassword(server.getPassword());
             session.setConfig("StrictHostKeyChecking", "no");
+            
+            // 设置认证方式，优先使用密码认证，避免Kerberos认证问题
+            Properties config = new Properties();
+            config.put("PreferredAuthentications", "password,publickey");
+            config.put("PubkeyAuthentication", "no");
+            config.put("GSSAPIAuthentication", "no");
+            config.put("KerberosAuthentication", "no");
+            session.setConfig(config);
+            
             session.setTimeout(context.getTimeoutSeconds() * 1000);
             session.connect();
             
@@ -194,14 +213,30 @@ public class FileCollectHandler extends AbstractCollectHandler {
             
             StringBuilder content = new StringBuilder();
             String line;
+            boolean firstLine = true;
             while ((line = reader.readLine()) != null) {
+                // 处理BOM字符（UTF-8 BOM为 \uFEFF）
+                if (firstLine && line.length() > 0) {
+                    // 检查并移除BOM字符
+                    if (line.charAt(0) == '\uFEFF') {
+                        line = line.substring(1);
+                        log.info("检测到并移除了UTF-8 BOM字符: {}", filePath);
+                    }
+                    firstLine = false;
+                }
                 content.append(line).append("\n");
             }
             
-            CollectResult result = CollectResult.success(content.toString());
-            result.setFilePath(filePath);
+            // 移除最后多余的换行符
+            String result = content.toString();
+            if (result.endsWith("\n") && result.length() > 0) {
+                result = result.substring(0, result.length() - 1);
+            }
             
-            return result;
+            CollectResult collectResult = CollectResult.success(result);
+            collectResult.setFilePath(filePath);
+            
+            return collectResult;
             
         } catch (Exception e) {
             log.error("SFTP文件下载失败", e);

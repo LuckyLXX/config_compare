@@ -1,0 +1,76 @@
+{
+  "groups": [
+    {
+      "name": "database",
+      "type": "com.config.compare.config.DatabaseProperties",
+      "sourceType": "com.config.compare.config.DatabaseProperties"
+    },
+    {
+      "name": "database.mysql",
+      "type": "com.config.compare.config.DatabaseProperties$MysqlConfig",
+      "sourceType": "com.config.compare.config.DatabaseProperties",
+      "sourceMethod": "public com.config.compare.config.DatabaseProperties.MysqlConfig getMysql() "
+    },
+    {
+      "name": "database.oracle",
+      "type": "com.config.compare.config.DatabaseProperties$OracleConfig",
+      "sourceType": "com.config.compare.config.DatabaseProperties",
+      "sourceMethod": "public com.config.compare.config.DatabaseProperties.OracleConfig getOracle() "
+    },
+    {
+      "name": "spring.datasource.druid",
+      "type": "javax.sql.DataSource",
+      "sourceType": "com.config.compare.config.DynamicDataSourceConfig",
+      "sourceMethod": "public javax.sql.DataSource dynamicDataSource() "
+    }
+  ],
+  "properties": [
+    {
+      "name": "database.mysql.driver-class-name",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$MysqlConfig"
+    },
+    {
+      "name": "database.mysql.password",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$MysqlConfig"
+    },
+    {
+      "name": "database.mysql.url",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$MysqlConfig"
+    },
+    {
+      "name": "database.mysql.username",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$MysqlConfig"
+    },
+    {
+      "name": "database.oracle.driver-class-name",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$OracleConfig"
+    },
+    {
+      "name": "database.oracle.password",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$OracleConfig"
+    },
+    {
+      "name": "database.oracle.url",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$OracleConfig"
+    },
+    {
+      "name": "database.oracle.username",
+      "type": "java.lang.String",
+      "sourceType": "com.config.compare.config.DatabaseProperties$OracleConfig"
+    },
+    {
+      "name": "database.type",
+      "type": "java.lang.String",
+      "description": "数据库类型：mysql\/oracle",
+      "sourceType": "com.config.compare.config.DatabaseProperties"
+    }
+  ],
+  "hints": []
+}

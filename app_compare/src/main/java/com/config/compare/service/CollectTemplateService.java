@@ -103,13 +103,27 @@ public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, C
      * 测试模板连接（支持动态配置）
      */
     public Map<String, Object> testTemplateWithConfig(String templateType, String templateContent, Long serverId) {
-        // 获取服务器信息
+        log.info("开始测试模板连接，模板类型：{}，服务器ID：{}", templateType, serverId);
+        
+        // HTTP类型可以不需要服务器，直接使用模板中的URL测试
+        if ("API".equals(templateType) && (serverId == null || serverId == 0)) {
+            log.info("HTTP类型模板直接测试，不使用服务器");
+            try {
+                CollectTemplate tempTemplate = new CollectTemplate();
+                tempTemplate.setTemplateType(templateType);
+                tempTemplate.setTemplateContent(templateContent);
+                return testApiTemplate(templateContent, null);
+            } catch (Exception e) {
+                log.error("HTTP接口测试失败", e);
+                throw new RuntimeException("连接测试失败：" + e.getMessage());
+            }
+        }
+        
+        // 其他类型需要服务器信息
         ServerInstance server = serverInstanceMapper.selectById(serverId);
         if (server == null) {
             throw new RuntimeException("服务器实例不存在");
         }
-
-        log.info("开始测试模板连接，模板类型：{}，服务器ID：{}", templateType, serverId);
         
         try {
             // 创建临时模板对象
@@ -245,30 +259,196 @@ public class CollectTemplateService extends ServiceImpl<CollectTemplateMapper, C
 
     /**
      * 测试HTTP接口模板
+     * @param templateContent 模板内容（JSON格式）
+     * @param server 服务器实例（可为null，HTTP类型可以直接使用模板URL测试）
      */
+    @SuppressWarnings("unchecked")
     private Map<String, Object> testApiTemplate(String templateContent, ServerInstance server) {
+        long startTime = System.currentTimeMillis();
+        
         try {
-            // TODO: 实现HTTP接口调用测试
-            // 这里应该解析templateContent中的url、method、headers等参数
-            // 发送HTTP请求并返回结果
+            // 解析模板配置
+            Map<String, Object> configMap = new HashMap<>();
+            if (StringUtils.hasText(templateContent) && templateContent.trim().startsWith("{")) {
+                configMap = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(templateContent, Map.class);
+            }
             
-            return Map.of(
-                "success", true,
-                "message", "HTTP接口测试成功",
-                "testResult", "接口响应正常",
-                "responseInfo", Map.of(
-                    "statusCode", 200,
-                    "responseTime", 156L,
-                    "contentType", "application/json",
-                    "dataPreview", "{\"config\": \"value\", \"status\": \"active\"}"
-                )
-            );
+            String url = (String) configMap.get("url");
+            if (!StringUtils.hasText(url)) {
+                return Map.of(
+                    "success", false,
+                    "message", "接口地址不能为空",
+                    "error", "InvalidUrl"
+                );
+            }
+            
+            // 如果有服务器实例且有IP，替换URL中的host
+            if (server != null && StringUtils.hasText(server.getServerIp())) {
+                String originalUrl = url;
+                url = replaceUrlHost(url, server.getServerIp());
+                log.info("HTTP测试URL替换 - 原URL: {}, 新URL: {}", originalUrl, url);
+            }
+            
+            String method = (String) configMap.getOrDefault("method", "GET");
+            Integer timeout = configMap.get("timeout") != null ? 
+                Integer.valueOf(configMap.get("timeout").toString()) * 1000 : 30000;
+            Boolean ignoreSSL = Boolean.TRUE.equals(configMap.get("ignoreSSL"));
+            
+            log.info("开始HTTP接口测试 - URL: {}, Method: {}, Timeout: {}ms", url, method, timeout);
+            
+            // 构建HTTP请求
+            cn.hutool.http.HttpRequest request = cn.hutool.http.HttpUtil.createRequest(
+                cn.hutool.http.Method.valueOf(method.toUpperCase()), url);
+            request.timeout(timeout);
+            
+            // 设置SSL忽略
+            if (ignoreSSL && url.startsWith("https")) {
+                try {
+                    javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[]{
+                        new javax.net.ssl.X509TrustManager() {
+                            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {}
+                            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {}
+                            public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
+                        }
+                    };
+                    javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("TLS");
+                    sc.init(null, trustAllCerts, new java.security.SecureRandom());
+                    request.setSSLSocketFactory(sc.getSocketFactory());
+                } catch (Exception e) {
+                    log.warn("设置SSL忽略失败: {}", e.getMessage());
+                }
+            }
+            
+            // 设置请求头，并获取Content-Type
+            String contentType = null;
+            if (configMap.containsKey("headers")) {
+                Map<String, Object> headers = (Map<String, Object>) configMap.get("headers");
+                for (Map.Entry<String, Object> entry : headers.entrySet()) {
+                    if (entry.getValue() != null) {
+                        request.header(entry.getKey(), entry.getValue().toString());
+                        if ("Content-Type".equalsIgnoreCase(entry.getKey())) {
+                            contentType = entry.getValue().toString().toLowerCase();
+                        }
+                    }
+                }
+            }
+            
+            // 设置请求体
+            String body = (String) configMap.get("body");
+            if (StringUtils.hasText(body)) {
+                // 根据Content-Type决定发送方式
+                if (contentType != null && (contentType.contains("multipart/form-data") 
+                        || contentType.contains("application/x-www-form-urlencoded"))) {
+                    // 表单格式：解析JSON为Map后使用form()发送
+                    try {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        Map<String, Object> formData = mapper.readValue(body, Map.class);
+                        for (Map.Entry<String, Object> entry : formData.entrySet()) {
+                            if (entry.getValue() != null) {
+                                request.form(entry.getKey(), entry.getValue().toString());
+                            }
+                        }
+                        log.info("测试接口使用表单格式发送请求体，字段数: {}", formData.size());
+                    } catch (Exception e) {
+                        log.warn("解析请求体JSON失败，降级为原始body发送: {}", e.getMessage());
+                        request.body(body);
+                    }
+                } else {
+                    request.body(body);
+                }
+            }
+            
+            // 发送请求
+            cn.hutool.http.HttpResponse response = request.execute();
+            long executionTime = System.currentTimeMillis() - startTime;
+            
+            String responseBody = response.body();
+            // 移除BOM字符
+            if (responseBody != null && responseBody.length() > 0 && responseBody.charAt(0) == '\uFEFF') {
+                responseBody = responseBody.substring(1);
+            }
+            
+            // 截取预览内容
+            String dataPreview = responseBody;
+            if (dataPreview != null && dataPreview.length() > 500) {
+                dataPreview = dataPreview.substring(0, 500) + "...(内容过长已截断)";
+            }
+            
+            if (response.isOk()) {
+                log.info("HTTP接口测试成功，状态码: {}, 耗时: {}ms", response.getStatus(), executionTime);
+                
+                Map<String, Object> result = new HashMap<>();
+                result.put("success", true);
+                result.put("message", "HTTP接口测试成功");
+                result.put("testResult", responseBody);
+                result.put("executionTime", executionTime);
+                result.put("responseInfo", Map.of(
+                    "statusCode", response.getStatus(),
+                    "responseTime", executionTime + "ms",
+                    "contentType", response.header("Content-Type") != null ? response.header("Content-Type") : "unknown",
+                    "dataPreview", dataPreview != null ? dataPreview : ""
+                ));
+                
+                return result;
+            } else {
+                log.warn("HTTP接口测试失败，状态码: {}", response.getStatus());
+                return Map.of(
+                    "success", false,
+                    "message", "HTTP接口返回错误状态码：" + response.getStatus(),
+                    "error", "HttpError",
+                    "executionTime", executionTime,
+                    "testResult", responseBody != null ? responseBody : "",
+                    "responseInfo", Map.of(
+                        "statusCode", response.getStatus(),
+                        "responseTime", executionTime + "ms"
+                    )
+                );
+            }
+            
         } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            log.error("HTTP接口测试失败", e);
             return Map.of(
                 "success", false,
                 "message", "HTTP接口测试失败：" + e.getMessage(),
-                "error", e.getClass().getSimpleName()
+                "error", e.getClass().getSimpleName(),
+                "executionTime", executionTime,
+                "testResult", "错误详情: " + e.getMessage()
             );
+        }
+    }
+    
+    /**
+     * 替换URL中的host部分
+     */
+    private String replaceUrlHost(String originalUrl, String newHost) {
+        try {
+            java.net.URL url = new java.net.URL(originalUrl);
+            String protocol = url.getProtocol();
+            int port = url.getPort();
+            String path = url.getPath();
+            String query = url.getQuery();
+            
+            StringBuilder newUrl = new StringBuilder();
+            newUrl.append(protocol).append("://").append(newHost);
+            
+            if (port != -1) {
+                newUrl.append(":").append(port);
+            }
+            
+            if (StringUtils.hasText(path)) {
+                newUrl.append(path);
+            }
+            
+            if (StringUtils.hasText(query)) {
+                newUrl.append("?").append(query);
+            }
+            
+            return newUrl.toString();
+        } catch (Exception e) {
+            log.warn("URL解析失败，使用原始URL: {}, 错误: {}", originalUrl, e.getMessage());
+            return originalUrl;
         }
     }
 

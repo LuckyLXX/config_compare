@@ -1,0 +1,181 @@
+# 应用基本配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: config-compare
+  
+  # 数据源配置
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      # 连接池配置
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 60000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      # 监控配置
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        reset-enable: false
+        login-username: admin
+        login-password: admin
+      web-stat-filter:
+        enabled: true
+        url-pattern: /*
+        exclusions: "*.js,*.gif,*.jpg,*.bmp,*.png,*.css,*.ico,/druid/*"
+
+# 数据库类型配置
+database:
+  type: mysql  # mysql/oracle
+  mysql:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://117.72.150.127:3306/config_compare?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: Qq@857251389
+  oracle:
+    driver-class-name: oracle.jdbc.OracleDriver
+    url: jdbc:oracle:thin:@//localhost:1521/ORCL
+    username: config_compare
+    password: config_compare_2024
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  # 任务调度配置
+  quartz:
+    job-store-type: memory
+    properties:
+      org:
+        quartz:
+          scheduler:
+            instanceName: ConfigCompareScheduler
+            instanceId: AUTO
+          jobStore:
+            class: org.quartz.simpl.RAMJobStore
+          threadPool:
+            class: org.quartz.simpl.SimpleThreadPool
+            threadCount: 10
+            threadPriority: 5
+            threadsInheritContextClassLoaderOfInitializingThread: true
+
+# MyBatis Plus配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.config.compare.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    call-setters-on-nulls: true
+    jdbc-type-for-null: 'null'
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 根据数据库类型选择方言
+    database-id: ${database.type}
+  global-config:
+    db-config:
+      # 根据数据库类型选择ID生成策略
+      id-type: AUTO
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 日志配置
+logging:
+  level:
+    com.config.compare: DEBUG
+    com.baomidou.mybatisplus: DEBUG
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n'
+    file: '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n'
+  file:
+    name: logs/config-compare.log
+    max-size: 10MB
+    max-history: 30
+
+# Swagger配置
+springfox:
+  documentation:
+    swagger-ui:
+      enabled: true
+    swagger:
+      v2:
+        path: /api-docs
+
+# 自定义配置
+config:
+  compare:
+    # 文件存储路径
+    file:
+      upload-path: ./uploads
+      download-path: ./downloads
+      temp-path: ./temp
+    
+    # SSH连接配置
+    ssh:
+      connection-timeout: 30000
+      so-timeout: 60000
+      max-connections: 50
+    
+    # 采集配置
+    collect:
+      max-concurrency: 10
+      default-timeout: 300
+      retry-count: 3
+      temp-retention-days: 7
+    
+    # 比对配置
+    compare:
+      diff-context-lines: 3
+      max-diff-size: 1000
+    
+    # 安全配置
+    security:
+      password-key: "config-compare-2024"
+      token-expire-hours: 24
+
+# 数据处理配置
+app:
+  data-process:
+    # 临时文件存储目录
+    temp-dir: ./temp/data-process
+    # 临时文件过期时间（分钟）
+    temp-expire-minutes: 60
+  
+  # AI服务配置（可选，不配置则使用模拟结果）
+  ai:
+    deepseek:
+      url: https://api.deepseek.com/v1/chat/completions
+      api-key: ${AI_DEEPSEEK_KEY:}
+    gpt4:
+      url: https://api.openai.com/v1/chat/completions
+      api-key: ${AI_GPT4_KEY:}
+    claude:
+      url: https://api.anthropic.com/v1/messages
+      api-key: ${AI_CLAUDE_KEY:}

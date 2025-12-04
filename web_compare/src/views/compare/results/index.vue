@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="compare-results">
     <div class="page-header">
       <h2 class="page-title">比对结果</h2>
@@ -207,103 +207,19 @@
     </el-dialog>
 
     <!-- 差异分析对话框 -->
-    <el-dialog
+    <DiffAnalysisDialog
       v-model="diffDialogVisible"
-      title="差异分析 - 左右对比"
-      width="1400px"
-      top="5vh"
-    >
-      <!-- 差异统计信息 -->
-      <div class="diff-summary" style="margin-bottom: 20px;">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-statistic title="总差异数" :value="diffList.length" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="新增行" :value="diffList.filter(d => d.diffType === 'ADD').length" value-style="color: #67c23a" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="删除行" :value="diffList.filter(d => d.diffType === 'DELETE').length" value-style="color: #f56c6c" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="修改行" :value="diffList.filter(d => d.diffType === 'MODIFY').length" value-style="color: #e6a23c" />
-          </el-col>
-        </el-row>
-      </div>
+      :loading="diffLoading"
+      :baseline-title="'基线配置'"
+      :baseline-sub-title="currentResult?.baselineName || '基线配置'"
+      :current-title="'当前配置'"
+      :current-sub-title="currentResult?.serverInstance?.hostname || currentResult?.serverInstance || '当前配置'"
+      :baseline-content="baselineContent"
+      :current-content="currentContent"
+      :diff-list="diffList"
+      :aligned-lines="alignedLines"
+    />
 
-      <!-- 左右对比显示 -->
-      <div class="side-by-side-diff">
-        <div class="diff-header">
-          <div class="baseline-side">
-            <h4>基线配置</h4>
-            <span class="file-info">{{ currentResult?.baselineName || '基线配置' }}</span>
-          </div>
-          <div class="current-side">
-            <h4>当前配置</h4>
-            <span class="file-info">{{ currentResult?.serverInstance?.hostname || '当前配置' }}</span>
-          </div>
-        </div>
-        
-        <div class="diff-content" v-loading="diffLoading">
-          <div class="baseline-content">
-            <div class="line-numbers">
-              <div v-for="(line, index) in baselineLines" :key="`baseline-${index}`" 
-                   :class="['line-number', getLineClass(index, 'baseline')]">
-                {{ index + 1 }}
-              </div>
-            </div>
-            <div class="content-lines">
-              <div v-for="(line, index) in baselineLines" :key="`baseline-line-${index}`"
-                   :class="['content-line', getLineClass(index, 'baseline')]">
-                <span v-html="highlightLine(line, index, 'baseline')"></span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="current-content">
-            <div class="line-numbers">
-              <div v-for="(line, index) in currentLines" :key="`current-${index}`"
-                   :class="['line-number', getLineClass(index, 'current')]">
-                {{ index + 1 }}
-              </div>
-            </div>
-            <div class="content-lines">
-              <div v-for="(line, index) in currentLines" :key="`current-line-${index}`"
-                   :class="['content-line', getLineClass(index, 'current')]">
-                <span v-html="highlightLine(line, index, 'current')"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 差异详情表格 -->
-      <el-divider content-position="left">差异详情</el-divider>
-      <el-table
-        :data="diffList"
-        stripe
-        max-height="300"
-      >
-        <el-table-column prop="diffPath" label="行号" width="80" />
-        <el-table-column prop="diffType" label="差异类型" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getDiffTypeColor(row.diffType)">
-              {{ getDiffTypeText(row.diffType) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="diffLevel" label="严重程度" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getSeverityColor(row.diffLevel)" size="small">
-              {{ getSeverityText(row.diffLevel) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="baselineValue" label="基线值" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="currentValue" label="当前值" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="suggestAction" label="建议操作" min-width="150" show-overflow-tooltip />
-      </el-table>
-    </el-dialog>
   </div>
 </template>
 
@@ -313,9 +229,13 @@ import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { compareResultApi } from '@/api/compare'
 import { systemApi } from '@/api/system'
+import DiffAnalysisDialog from '@/components/diff/DiffAnalysisDialog.vue'
 
 export default {
   name: 'CompareResults',
+  components: {
+    DiffAnalysisDialog
+  },
   setup() {
     const route = useRoute()
     
@@ -325,13 +245,11 @@ export default {
     const resultList = ref([])
     const systemList = ref([])
     const diffList = ref([])
+    const alignedLines = ref([]) // 【新增】接收后端的对齐行数据
+    const baselineContent = ref('')
+    const currentContent = ref('')
     const currentResult = ref(null)
     const statistics = ref({})
-    
-    // 左右对比显示相关数据
-    const baselineLines = ref([])
-    const currentLines = ref([])
-    const diffLineMap = ref(new Map()) // 存储行号与差异的映射
     
     // 对话框状态
     const detailDialogVisible = ref(false)
@@ -458,24 +376,29 @@ export default {
       pagination.current = current
       getResultList()
     }
-    
+
+    const handleSelectionChange = (selection) => {
+      // 处理表格选择变化
+      console.log('选择的行:', selection)
+    }
+
     const handleViewDetails = (row) => {
       currentResult.value = row
       detailDialogVisible.value = true
     }
     
-    const handleViewDiff = async (row) => {
+        const handleViewDiff = async (row) => {
       try {
         diffLoading.value = true
         currentResult.value = row
-        
-        // 获取差异详情
+
         const response = await compareResultApi.getDiffDetails(row.id)
-        diffList.value = response.data?.records || []
-        
-        // 构建左右对比数据
-        await buildSideBySideData(row)
-        
+        const data = response.data || {}
+        diffList.value = data.records || []
+        alignedLines.value = data.alignedLines || [] // 【新增】提取后端的对齐行数据
+        baselineContent.value = data.baselineContent || ''
+        currentContent.value = data.currentContent || ''
+
         diffDialogVisible.value = true
       } catch (error) {
         console.error('获取差异详情失败:', error)
@@ -483,92 +406,7 @@ export default {
         diffLoading.value = false
       }
     }
-    
-    // 构建左右对比数据
-    const buildSideBySideData = async (result) => {
-      try {
-        // 从差异详情API获取基线内容和当前内容
-        const response = await compareResultApi.getDiffDetails(result.id)
-        if (response.data) {
-          const baselineContent = response.data.baselineContent || ''
-          const currentContent = response.data.currentContent || ''
-          
-          // 按行分割
-          baselineLines.value = baselineContent.split('\n')
-          currentLines.value = currentContent.split('\n')
-          
-          // 构建差异行映射
-          diffLineMap.value.clear()
-          
-          // 处理文本比对的差异（line_格式）
-          diffList.value.forEach(diff => {
-            if (diff.diffPath && diff.diffPath.startsWith('line_')) {
-              const lineNum = parseInt(diff.diffPath.replace('line_', '')) - 1
-              diffLineMap.value.set(lineNum, diff)
-            }
-          })
-          
-          // 处理JSON比对的差异：通过diffKey找到对应的行
-          if (diffLineMap.value.size === 0) {
-            const baselineLines = baselineContent.split('\n')
-            const currentLines = currentContent.split('\n')
-            
-            // 遍历差异列表，通过diffKey找到对应的行
-            diffList.value.forEach(diff => {
-              if (diff.diffKey) {
-                // 在基线内容和当前内容中查找包含diffKey的行
-                for (let i = 0; i < Math.max(baselineLines.length, currentLines.length); i++) {
-                  const baselineLine = baselineLines[i] || ''
-                  const currentLine = currentLines[i] || ''
-                  
-                  // 如果行中包含diffKey，标记为差异行
-                  if (baselineLine.includes(diff.diffKey) || currentLine.includes(diff.diffKey)) {
-                    diffLineMap.value.set(i, diff)
-                    break // 找到第一个匹配的行就停止
-                  }
-                }
-              }
-            })
-          }
-        }
-      } catch (error) {
-        console.error('构建左右对比数据失败:', error)
-      }
-    }
-    
-    // 获取行样式类
-    const getLineClass = (index, side) => {
-      const diff = diffLineMap.value.get(index)
-      if (!diff) return side
-      
-      switch (diff.diffType) {
-        case 'ADD':
-          return side === 'current' ? 'diff-added' : side
-        case 'DELETE':
-          return side === 'baseline' ? 'diff-removed' : side
-        case 'MODIFY':
-          return 'diff-modified'
-        default:
-          return side
-      }
-    }
-    
-    // 高亮行内容
-    const highlightLine = (line, index, side) => {
-      const diff = diffLineMap.value.get(index)
-      if (!diff) return line
-      
-      // 简单的HTML转义
-      const escapedLine = line
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-      
-      return escapedLine
-    }
-    
+
     const handleExport = async () => {
       try {
         const params = { ...searchForm }
@@ -593,7 +431,7 @@ export default {
         console.error('导出失败:', error)
       }
     }
-    
+
     // 工具函数
     const getCompareStatusColor = (status) => {
       const colorMap = {
@@ -690,10 +528,11 @@ export default {
       resultList,
       systemList,
       diffList,
+      alignedLines, // 【新增】导出alignedLines
+      baselineContent,
+      currentContent,
       currentResult,
       statistics,
-      baselineLines,
-      currentLines,
       detailDialogVisible,
       diffDialogVisible,
       searchForm,
@@ -703,6 +542,7 @@ export default {
       handleRefresh,
       handleSizeChange,
       handleCurrentChange,
+      handleSelectionChange,
       handleViewDetails,
       handleViewDiff,
       handleExport,
@@ -713,8 +553,6 @@ export default {
       getDiffTypeText,
       getSeverityColor,
       getSeverityText,
-      getLineClass,
-      highlightLine,
       formatDuration,
       formatJson
     }
@@ -811,108 +649,11 @@ export default {
   .text-success { color: #67c23a; }
   .text-warning { color: #e6a23c; }
   .text-danger { color: #f56c6c; }
-  
-  .side-by-side-diff {
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 20px;
-    
-    .diff-header {
-      display: flex;
-      background-color: #f5f7fa;
-      border-bottom: 1px solid #ebeef5;
-      
-      .baseline-side, .current-side {
-        flex: 1;
-        padding: 15px 20px;
-        text-align: center;
-        border-right: 1px solid #ebeef5;
-        
-        &:last-child {
-          border-right: none;
-        }
-        
-        h4 {
-          margin: 0 0 8px 0;
-          font-size: 16px;
-          color: #303133;
-        }
-        
-        .file-info {
-          font-size: 14px;
-          color: #909399;
-        }
-      }
-    }
-    
-    .diff-content {
-      display: flex;
-      height: 500px;
-      overflow: hidden;
-      
-      .baseline-content, .current-content {
-        flex: 1;
-        position: relative;
-        border-right: 1px solid #ebeef5;
-        overflow-y: auto;
-        
-        &:last-child {
-          border-right: none;
-        }
-        
-        .line-numbers {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 50px;
-          background-color: #fafafa;
-          border-right: 1px solid #ebeef5;
-          z-index: 1;
-          
-          .line-number {
-            height: 20px;
-            line-height: 20px;
-            padding: 0 10px;
-            text-align: right;
-            color: #909399;
-            font-size: 12px;
-            font-family: monospace;
-            user-select: none;
-            border-bottom: 1px solid #f0f0f0;
-          }
-        }
-        
-        .content-lines {
-          padding-left: 50px;
-          
-          .content-line {
-            height: 20px;
-            line-height: 20px;
-            padding: 0 10px;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            white-space: pre;
-            border-bottom: 1px solid #f0f0f0;
-            
-            &.diff-added {
-              background-color: #f0f9eb;
-              color: #67c23a;
-            }
-            
-            &.diff-removed {
-              background-color: #fef0f0;
-              color: #f56c6c;
-            }
-            
-            &.diff-modified {
-              background-color: #fffbe6;
-              color: #e6a23c;
-            }
-          }
-        }
-      }
-    }
-  }
 }
 </style>
+
+
+
+
+
+

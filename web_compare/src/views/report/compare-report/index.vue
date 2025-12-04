@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="compare-report">
     <div class="page-header">
       <h2 class="page-title">
@@ -268,11 +268,19 @@
               {{ formatDuration(row.durationMs || row.duration) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" align="center" fixed="right">
+          <el-table-column label="操作" width="220" align="center" fixed="right">
             <template #default="{ row }">
               <el-button type="warning" size="small" @click="viewDiffAnalysis(row)">
                 <el-icon><DataAnalysis /></el-icon>
                 差异分析
+              </el-button>
+              <el-button 
+                type="success" 
+                size="small" 
+                @click="handlePromote(row)"
+                :disabled="row.compareStatus === 1"
+              >
+                晋级为基线
               </el-button>
             </template>
           </el-table-column>
@@ -436,12 +444,12 @@
                   </el-table-column>
                   <el-table-column prop="baselineValue" label="基线值" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">
-                      <code class="value-code">{{ row.baselineValue || '-' }}</code>
+                      <code :class="getBaselineValueClass(row.diffType)">{{ row.baselineValue || '-' }}</code>
                     </template>
                   </el-table-column>
                   <el-table-column prop="currentValue" label="当前值" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">
-                      <code class="current-value-code">{{ row.currentValue || '-' }}</code>
+                      <code :class="getCurrentValueClass(row.diffType)">{{ row.currentValue || '-' }}</code>
                     </template>
                   </el-table-column>
                   <el-table-column prop="suggestAction" label="建议操作" min-width="180" show-overflow-tooltip />
@@ -531,120 +539,84 @@
     </el-dialog>
 
     <!-- 差异分析对话框 -->
-    <el-dialog
+    <DiffAnalysisDialog
       v-model="diffDialogVisible"
-      title="差异分析 - 左右对比"
-      width="1400px"
-      top="5vh"
+      :loading="diffLoading"
+      :baseline-title="'基线配置'"
+      :baseline-sub-title="currentResult?.baselineName || '基线配置'"
+      :current-title="'当前配置'"
+      :current-sub-title="currentResult?.serverInstance || '当前配置'"
+      :baseline-content="baselineContent"
+      :current-content="currentContent"
+      :diff-list="diffList"
+      :aligned-lines="alignedLines"
+    />
+    
+    <!-- 晋级为基线确认对话框 -->
+    <el-dialog
+      v-model="promoteDialogVisible"
+      title="晋级为基线确认"
+      width="600px"
     >
-      <!-- 差异统计信息 -->
-      <div class="diff-summary" style="margin-bottom: 20px;">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-statistic title="总差异数" :value="diffList.length" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="新增行" :value="diffList.filter(d => d.diffType === 'ADD').length" value-style="color: #67c23a" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="删除行" :value="diffList.filter(d => d.diffType === 'DELETE').length" value-style="color: #f56c6c" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="修改行" :value="diffList.filter(d => d.diffType === 'MODIFY').length" value-style="color: #e6a23c" />
-          </el-col>
-        </el-row>
+      <div v-if="promoteTarget">
+        <el-alert
+          title="确认要将当前采集版本晋级为基线吗？"
+          type="warning"
+          :closable="false"
+          style="margin-bottom: 20px"
+        >
+          <template #default>
+            <p><strong>晋级说明：</strong></p>
+            <p>• 当前采集的配置内容将成为新的标准基线</p>
+            <p>• 原有默认基线将自动归档到版本历史</p>
+            <p>• 新基线版本号将自动生成（基于时间戳）</p>
+            <p>• 后续的配置比对将以此新基线为准</p>
+            <p>• 所有操作都会记录到版本历史中，可随时回滚</p>
+          </template>
+        </el-alert>
+
+        <el-form :model="promoteForm" label-width="120px">
+          <el-form-item label="任务名称">
+            <span>{{ promoteTarget.taskName }}</span>
+          </el-form-item>
+          <el-form-item label="系统">
+            <span>{{ selectedSystemName }}</span>
+          </el-form-item>
+          <el-form-item label="服务器">
+            <span>{{ promoteTarget.serverInstance || promoteTarget.hostname }}</span>
+          </el-form-item>
+          <el-form-item label="配置分类">
+            <span>{{ promoteTarget.categoryName || '未分类' }}</span>
+          </el-form-item>
+          <el-form-item label="文件名">
+            <el-input v-model="promoteForm.fileName" placeholder="请输入文件名（可选）" />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input
+              v-model="promoteForm.description"
+              type="textarea"
+              :rows="4"
+              placeholder="请输入描述信息（可选）"
+            />
+          </el-form-item>
+        </el-form>
       </div>
 
-      <!-- 左右对比显示 -->
-      <div class="side-by-side-diff">
-        <div class="diff-header">
-          <div class="baseline-side">
-            <h4>基线配置</h4>
-            <span class="file-info">{{ currentResult?.baselineName || '基线配置' }}</span>
-          </div>
-          <div class="current-side">
-            <h4>当前配置</h4>
-            <span class="file-info">{{ currentResult?.serverInstance || '当前配置' }}</span>
-          </div>
-        </div>
-        
-        <div class="diff-content" v-loading="diffLoading">
-          <div class="baseline-content">
-            <div class="line-numbers">
-              <div v-for="(line, index) in baselineLines" :key="`baseline-${index}`" 
-                   :class="['line-number', getLineClass(index, 'baseline')]">
-                {{ index + 1 }}
-              </div>
-            </div>
-            <div class="content-lines">
-              <div v-for="(line, index) in baselineLines" :key="`baseline-line-${index}`"
-                   :class="['content-line', getLineClass(index, 'baseline')]">
-                <span v-html="highlightLine(line, index, 'baseline')"></span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="current-content">
-            <div class="line-numbers">
-              <div v-for="(line, index) in currentLines" :key="`current-${index}`"
-                   :class="['line-number', getLineClass(index, 'current')]">
-                {{ index + 1 }}
-              </div>
-            </div>
-            <div class="content-lines">
-              <div v-for="(line, index) in currentLines" :key="`current-line-${index}`"
-                   :class="['content-line', getLineClass(index, 'current')]">
-                <span v-html="highlightLine(line, index, 'current')"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 差异详情表格 -->
-      <el-divider content-position="left">差异详情</el-divider>
-      <el-table
-        :data="diffList"
-        stripe
-        max-height="300"
-      >
-        <el-table-column prop="diffPath" label="行号" width="80" />
-        <el-table-column prop="diffType" label="差异类型" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getDiffTypeColor(row.diffType)">
-              {{ getDiffTypeText(row.diffType) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="diffLevel" label="严重程度" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getSeverityColor(row.diffLevel)" size="small">
-              {{ getSeverityText(row.diffLevel) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="baselineValue" label="基线值" min-width="250" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="value-code baseline-value">{{ row.baselineValue || '-' }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="currentValue" label="当前值" min-width="250" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="value-code current-value">{{ row.currentValue || '-' }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="suggestAction" label="建议操作" min-width="150" show-overflow-tooltip />
-      </el-table>
+      <template #footer>
+        <el-button @click="promoteDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmPromote" :loading="promoting">
+          确认晋级
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Document,
-  Printer,
   Refresh,
   Filter,
   Clock,
@@ -658,25 +630,20 @@ import {
   DataAnalysis,
   Search,
   DocumentCopy,
-  Folder,
-  Star,
-  View,
-  DataBoard,
-  QuestionFilled,
-  Close,
-  Download,
-  List
+  Loading,
+  DocumentChecked
 } from '@element-plus/icons-vue'
 import { systemApi } from '@/api/system'
 import { compareResultApi } from '@/api/compare'
-import { categoryApi } from '@/api/baseline'
+import { categoryApi, baselineApi } from '@/api/baseline'
 import { compareReportApi } from '@/api/report'
+import DiffAnalysisDialog from '@/components/diff/DiffAnalysisDialog.vue'
 
 export default {
   name: 'CompareReport',
   components: {
+    DiffAnalysisDialog,
     Document,
-    Printer,
     Refresh,
     Filter,
     Clock,
@@ -690,14 +657,8 @@ export default {
     DataAnalysis,
     Search,
     DocumentCopy,
-    Folder,
-    Star,
-    View,
-    DataBoard,
-    QuestionFilled,
-    Close,
-    Download,
-    List
+    Loading,
+    DocumentChecked
   },
   setup() {
     // 响应式数据
@@ -743,13 +704,22 @@ export default {
     
     // 差异分析相关数据
     const diffList = ref([])
-    const baselineLines = ref([])
-    const currentLines = ref([])
-    const diffLineMap = ref(new Map())
+    const baselineContent = ref('')
+    const currentContent = ref('')
+    const alignedLines = ref([]) // 【新增】对齐行数据
 
-    // 差异统计数据
+    // 差异统计数据（概览预警等）
     const criticalDiffs = ref([])
     const warningDiffs = ref([])
+    
+    // 晋级为基线相关数据
+    const promoteDialogVisible = ref(false)
+    const promoteTarget = ref(null)
+    const promoting = ref(false)
+    const promoteForm = reactive({
+      fileName: '',
+      description: ''
+    })
 
     // 报告用差异数据缓存
     const reportDiffData = ref(new Map())
@@ -1073,7 +1043,12 @@ export default {
         let transformedResults = resultData.map(result => ({
           id: result.id,
           taskName: result.taskName,
+          systemId: result.systemId || selectedSystem.value,  // 【新增】系统ID
           systemName: selectedSystemName.value,
+          serverTypeId: result.serverTypeId,  // 【新增】服务器类型ID
+          categoryId: result.categoryId,  // 【新增】配置分类ID
+          categoryName: result.categoryName,  // 【新增】配置分类名称
+          baselineName: result.baselineName,  // 【新增】基线名称
           serverInstance: result.serverInstance?.hostname || result.hostname,
           compareStatus: result.compareStatus,
           consistencyScore: result.consistencyScore || calculateConsistencyScore(result),
@@ -1087,7 +1062,6 @@ export default {
           executeTime: result.executeTime || result.compareTime || result.createTime,
           durationMs: result.durationMs || result.duration,
           taskId: result.taskId,
-          taskName: result.taskName,
           isLatest: true // 标记为最新结果
         }))
         
@@ -1194,14 +1168,14 @@ export default {
       try {
         diffLoading.value = true
         currentResult.value = row
-        
-        // 获取差异详情
+
         const response = await compareResultApi.getDiffDetails(row.id)
-        diffList.value = response.data?.records || []
-        
-        // 构建左右对比数据
-        await buildSideBySideData(row)
-        
+        const data = response.data || {}
+        diffList.value = data.records || []
+        alignedLines.value = data.alignedLines || [] // 【新增】提取后端的对齐行数据
+        baselineContent.value = data.baselineContent || ''
+        currentContent.value = data.currentContent || ''
+
         diffDialogVisible.value = true
       } catch (error) {
         console.error('获取差异详情失败:', error)
@@ -1211,58 +1185,78 @@ export default {
       }
     }
     
-    // 构建左右对比数据
-    const buildSideBySideData = async (result) => {
+    // 晋级为基线
+    const handlePromote = (row) => {
+      console.log('🔍 晋级为基线 - 当前行数据:', row)
+      console.log('🔍 compareStatus:', row.compareStatus, '(类型:', typeof row.compareStatus, ')')
+      
+      // 只有比对不一致或有差异的情况才需要晋级
+      if (row.compareStatus === 1) {
+        ElMessage.warning('配置已一致，无需晋级为基线')
+        return
+      }
+      
+      // 检查必要字段
+      if (!row.systemId || !row.serverTypeId || !row.categoryId) {
+        console.error('❌ 缺少必要字段:', {
+          systemId: row.systemId,
+          serverTypeId: row.serverTypeId,
+          categoryId: row.categoryId
+        })
+        ElMessage.error('数据不完整，无法晋级为基线')
+        return
+      }
+      
+      promoteTarget.value = row
+      promoteForm.fileName = row.categoryName ? `${row.categoryName}.txt` : 'config.txt'
+      promoteForm.description = `从比对任务"${row.taskName}"晋级`
+      promoteDialogVisible.value = true
+    }
+
+    // 确认晋级
+    const confirmPromote = async () => {
+      if (!promoteTarget.value) return
+      
       try {
-        // 从差异详情API获取基线内容和当前内容
-        const response = await compareResultApi.getDiffDetails(result.id)
-        if (response.data) {
-          const baselineContent = response.data.baselineContent || ''
-          const currentContent = response.data.currentContent || ''
-          
-          // 按行分割
-          baselineLines.value = baselineContent.split('\n')
-          currentLines.value = currentContent.split('\n')
-          
-          // 构建差异行映射
-          diffLineMap.value.clear()
-          
-          // 处理文本比对的差异（line_格式）
-          diffList.value.forEach(diff => {
-            if (diff.diffPath && diff.diffPath.startsWith('line_')) {
-              const lineNum = parseInt(diff.diffPath.replace('line_', '')) - 1
-              diffLineMap.value.set(lineNum, diff)
-            }
-          })
-          
-          // 处理JSON比对的差异：通过diffKey找到对应的行
-          if (diffLineMap.value.size === 0) {
-            const baselineLines = baselineContent.split('\n')
-            const currentLines = currentContent.split('\n')
-            
-            // 遍历差异列表，通过diffKey找到对应的行
-            diffList.value.forEach(diff => {
-              if (diff.diffKey) {
-                // 在基线内容和当前内容中查找包含diffKey的行
-                for (let i = 0; i < Math.max(baselineLines.length, currentLines.length); i++) {
-                  const baselineLine = baselineLines[i] || ''
-                  const currentLine = currentLines[i] || ''
-                  
-                  // 如果行中包含diffKey，标记为差异行
-                  if (baselineLine.includes(diff.diffKey) || currentLine.includes(diff.diffKey)) {
-                    diffLineMap.value.set(i, diff)
-                    break // 找到第一个匹配的行就停止
-                  }
-                }
-              }
-            })
-          }
-        }
+        promoting.value = true
+        
+        // 获取差异详情以获取currentContent
+        const response = await compareResultApi.getDiffDetails(promoteTarget.value.id)
+        const data = response.data || {}
+        
+        console.log('🔍 晋级参数:', {
+          systemId: promoteTarget.value.systemId,
+          serverTypeId: promoteTarget.value.serverTypeId,
+          categoryId: promoteTarget.value.categoryId,
+          baselineName: promoteTarget.value.baselineName || '(后端自动获取)',
+          fileName: promoteForm.fileName
+        })
+        
+        // 调用晋级接口
+        const promoteResponse = await baselineApi.promoteToBaseline({
+          systemId: promoteTarget.value.systemId,
+          serverTypeId: promoteTarget.value.serverTypeId,
+          categoryId: promoteTarget.value.categoryId,
+          baselineName: promoteTarget.value.baselineName,  // 可选，后端会自动获取
+          currentContent: data.currentContent || '',
+          fileName: promoteForm.fileName,
+          description: promoteForm.description
+        })
+        
+        const newBaseline = promoteResponse.data
+        ElMessage.success(`晋级成功！新基线版本: ${newBaseline.baselineVersion}`)
+        promoteDialogVisible.value = false
+        
+        // 刷新列表
+        await loadCompareResults()
       } catch (error) {
-        console.error('构建左右对比数据失败:', error)
+        console.error('晋级失败:', error)
+        ElMessage.error('晋级失败: ' + (error.message || '未知错误'))
+      } finally {
+        promoting.value = false
       }
     }
-    
+
     // 计算总体评分
     const calculateOverallScore = () => {
       if (!compareResults.value.length) return 100
@@ -1522,39 +1516,6 @@ export default {
       if (score < 95) return 'info-row'
       return ''
     }
-
-    // 获取行样式类
-    const getLineClass = (index, side) => {
-      const diff = diffLineMap.value.get(index)
-      if (!diff) return side
-
-      switch (diff.diffType) {
-        case 'ADD':
-          return side === 'current' ? 'diff-added' : side
-        case 'DELETE':
-          return side === 'baseline' ? 'diff-removed' : side
-        case 'MODIFY':
-          return 'diff-modified'
-        default:
-          return side
-      }
-    }
-    
-    // 高亮行内容
-    const highlightLine = (line, index, side) => {
-      const diff = diffLineMap.value.get(index)
-      if (!diff) return line
-      
-      // 简单的HTML转义
-      const escapedLine = line
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-      
-      return escapedLine
-    }
     
     // 差异类型相关工具函数
     const getDiffTypeColor = (type) => {
@@ -1573,6 +1534,26 @@ export default {
         'MODIFY': '修改'
       }
       return textMap[type] || '未知'
+    }
+    
+    // 根据差异类型获取基线值的样式类
+    const getBaselineValueClass = (diffType) => {
+      const classMap = {
+        'ADD': 'value-code-gray',      // 新增：基线值为空，用灰色
+        'DELETE': 'value-code-danger',  // 缺失：基线值被删除，用红色
+        'MODIFY': 'value-code-blue'     // 修改：基线原值，用蓝色
+      }
+      return classMap[diffType] || 'value-code-blue'
+    }
+    
+    // 根据差异类型获取当前值的样式类
+    const getCurrentValueClass = (diffType) => {
+      const classMap = {
+        'ADD': 'value-code-success',    // 新增：新增的值，用绿色
+        'DELETE': 'value-code-gray',    // 缺失：当前值为空，用灰色
+        'MODIFY': 'value-code-warning'  // 修改：修改后的值，用橙色
+      }
+      return classMap[diffType] || 'value-code-success'
     }
     
     const getSeverityColor = (severity) => {
@@ -1820,13 +1801,18 @@ export default {
       selectedRows,
       pagination,
       diffList,
-      baselineLines,
-      currentLines,
+      baselineContent,
+      currentContent,
+      alignedLines,
       criticalDiffs,
       warningDiffs,
       selectedSystemName,
       categorizedResults,
       reportDiffData,
+      promoteDialogVisible,
+      promoteTarget,
+      promoting,
+      promoteForm,
       handleSystemChange,
       handleRefresh,
       handleSearch,
@@ -1836,6 +1822,8 @@ export default {
       openOverviewDialog,
       handleExportExcel,
       viewDiffAnalysis,
+      handlePromote,
+      confirmPromote,
       calculateOverallScore,
       getHealthScoreText,
       getSystemEnvType,
@@ -1848,8 +1836,6 @@ export default {
       generateConclusions,
       getScoreClass,
       getTableRowClassName,
-      getLineClass,
-      highlightLine,
       getSystemTagType,
       getSystemHealthType,
       getSystemHealthText,
@@ -1860,6 +1846,8 @@ export default {
       formatDuration,
       getDiffTypeColor,
       getDiffTypeText,
+      getBaselineValueClass,
+      getCurrentValueClass,
       getSeverityColor,
       getSeverityText,
       getRowClassName
@@ -2631,53 +2619,83 @@ export default {
               }
             }
             
-            .value-code {
-              // 基线值使用蓝色系背景
-              background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+            // 基础样式
+            [class^="value-code"] {
               padding: 6px 12px;
               border-radius: 6px;
-              border-left: 3px solid #3b82f6;
               font-family: 'Consolas', 'Monaco', monospace;
               font-size: 12px;
-              color: #1e40af;
               display: block;
               width: 100%;
               text-align: left;
               word-break: break-all;
               white-space: pre-wrap;
               line-height: 1.5;
-              box-shadow: 0 1px 3px rgba(59, 130, 246, 0.1);
               transition: all 0.2s ease;
               box-sizing: border-box;
               
               &:hover {
                 transform: translateY(-1px);
+              }
+            }
+            
+            // 蓝色系 - 用于修改类型的基线值
+            .value-code-blue {
+              background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+              border-left: 3px solid #3b82f6;
+              color: #1e40af;
+              box-shadow: 0 1px 3px rgba(59, 130, 246, 0.1);
+              
+              &:hover {
                 box-shadow: 0 2px 6px rgba(59, 130, 246, 0.15);
               }
             }
             
-            // 当前值使用绿色系背景
-            .current-value-code {
+            // 绿色系 - 用于新增类型的当前值
+            .value-code-success {
               background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
-              padding: 6px 12px;
-              border-radius: 6px;
               border-left: 3px solid #10b981;
-              font-family: 'Consolas', 'Monaco', monospace;
-              font-size: 12px;
               color: #065f46;
-              display: block;
-              width: 100%;
-              text-align: left;
-              word-break: break-all;
-              white-space: pre-wrap;
-              line-height: 1.5;
               box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
-              transition: all 0.2s ease;
-              box-sizing: border-box;
               
               &:hover {
-                transform: translateY(-1px);
                 box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
+              }
+            }
+            
+            // 橙色系 - 用于修改类型的当前值
+            .value-code-warning {
+              background: linear-gradient(135deg, #fed7aa 0%, #ffedd5 100%);
+              border-left: 3px solid #f59e0b;
+              color: #92400e;
+              box-shadow: 0 1px 3px rgba(245, 158, 11, 0.1);
+              
+              &:hover {
+                box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);
+              }
+            }
+            
+            // 红色系 - 用于缺失类型的基线值
+            .value-code-danger {
+              background: linear-gradient(135deg, #fecaca 0%, #fee2e2 100%);
+              border-left: 3px solid #ef4444;
+              color: #991b1b;
+              box-shadow: 0 1px 3px rgba(239, 68, 68, 0.1);
+              
+              &:hover {
+                box-shadow: 0 2px 6px rgba(239, 68, 68, 0.15);
+              }
+            }
+            
+            // 灰色系 - 用于空值（新增的基线值或缺失的当前值）
+            .value-code-gray {
+              background: linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%);
+              border-left: 3px solid #9ca3af;
+              color: #6b7280;
+              box-shadow: 0 1px 3px rgba(156, 163, 175, 0.1);
+              
+              &:hover {
+                box-shadow: 0 2px 6px rgba(156, 163, 175, 0.15);
               }
             }
           }
@@ -2878,3 +2896,8 @@ export default {
   }
 }
 </style>
+
+
+
+
+

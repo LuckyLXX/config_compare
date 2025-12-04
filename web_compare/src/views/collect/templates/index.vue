@@ -325,6 +325,13 @@
 
                 <!-- HTTP接口配置 -->
                 <div v-if="form.templateType === 'API'" class="config-section">
+                  <div class="section-header-actions" style="margin-bottom: 15px; display: flex; justify-content: flex-end;">
+                    <el-button type="success" size="small" @click="openCurlImport">
+                      <el-icon><DocumentCopy /></el-icon>
+                      从 cURL 导入
+                    </el-button>
+                  </div>
+
                   <el-form-item label="接口地址" required>
                     <el-input 
                       v-model="apiConfig.url" 
@@ -333,7 +340,7 @@
                     />
                     <div class="field-tip">
                       <el-icon><InfoFilled /></el-icon>
-                      HTTP接口的完整URL地址，支持HTTP和HTTPS
+                      HTTP接口的完整URL地址，支持HTTP和HTTPS。创建采集任务时如果选择了服务器实例，URL中的域名/IP将被服务器实例的IP替换
                     </div>
                   </el-form-item>
                   
@@ -372,6 +379,11 @@
                     </el-col>
                   </el-row>
 
+                  <el-form-item label="SSL设置">
+                    <el-checkbox v-model="apiConfig.ignoreSSL">忽略 SSL 证书验证 (不安全)</el-checkbox>
+                    <div class="field-tip">如果是内网自签名 HTTPS 证书,请勾选此项</div>
+                  </el-form-item>
+
                   <el-form-item label="请求头">
                     <div class="headers-config">
                       <div 
@@ -408,12 +420,38 @@
                   </el-form-item>
 
                   <el-form-item v-if="['POST', 'PUT'].includes(apiConfig.method)" label="请求体">
-                    <el-input 
-                      v-model="apiConfig.body" 
-                      type="textarea"
-                      :rows="4"
-                      placeholder="JSON格式的请求体内容"
-                    />
+                    <div class="body-config">
+                      <div 
+                        v-for="(param, index) in apiConfig.bodyParams" 
+                        :key="index" 
+                        class="body-item"
+                      >
+                        <el-input 
+                          v-model="param.key" 
+                          placeholder="参数名"
+                          style="width: 200px; margin-right: 10px"
+                        />
+                        <el-input 
+                          v-model="param.value" 
+                          placeholder="参数值"
+                          style="width: 300px; margin-right: 10px"
+                        />
+                        <el-button 
+                          type="danger" 
+                          size="small" 
+                          @click="removeBodyParam(index)"
+                          :icon="Delete"
+                        />
+                      </div>
+                      <el-button 
+                        type="primary" 
+                        size="small" 
+                        @click="addBodyParam"
+                        :icon="Plus"
+                      >
+                        添加参数
+                      </el-button>
+                    </div>
                   </el-form-item>
                 </div>
 
@@ -501,10 +539,11 @@
                     <div class="test-actions">
                       <el-select 
                         v-model="testServerId" 
-                        placeholder="选择测试服务器" 
+                        :placeholder="form.templateType === 'API' ? '可选测试服务器' : '选择测试服务器'" 
                         size="small"
                         style="width: 150px; margin-right: 8px"
                         @change="handleTestServerChange"
+                        clearable
                       >
                         <el-option 
                           v-for="server in testServerList" 
@@ -527,7 +566,7 @@
                         size="small" 
                         @click="testConnection"
                         :loading="testing"
-                        :disabled="!testServerId"
+                        :disabled="!canTestConnection"
                       >
                         测试连接
                       </el-button>
@@ -565,6 +604,36 @@
           >
             确定
           </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- cURL 导入对话框 -->
+    <el-dialog
+      v-model="curlDialogVisible"
+      title="导入 cURL"
+      width="600px"
+      append-to-body
+    >
+      <div class="curl-import-content">
+        <el-alert
+          title="支持 Chrome / Postman 格式的 cURL"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 10px;"
+        />
+        <el-input
+          v-model="curlContent"
+          type="textarea"
+          :rows="10"
+          placeholder="请粘贴 cURL 命令..."
+        />
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="curlDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleCurlImport">解析并导入</el-button>
         </div>
       </template>
     </el-dialog>
@@ -691,7 +760,8 @@ import {
   Cpu, 
   Document, 
   Connection, 
-  Setting 
+  Setting,
+  DocumentCopy
 } from '@element-plus/icons-vue'
 import { collectTemplateApi } from '@/api/collect'
 import { serverTypeApi, serverInstanceApi } from '@/api/system'
@@ -754,9 +824,10 @@ export default {
       url: '',
       method: 'GET',
       headers: [],
-      body: '',
+      bodyParams: [],  // 改为key-value数组形式
       timeout: 30,
-      retryCount: 3
+      retryCount: 3,
+      ignoreSSL: false
     })
 
     const apolloConfig = reactive({
@@ -772,6 +843,295 @@ export default {
     const testing = ref(false)
     const testServerId = ref(null)
     const testServerList = ref([])
+
+    // cURL 导入相关
+    const curlDialogVisible = ref(false)
+    const curlContent = ref('')
+
+    const openCurlImport = () => {
+      curlContent.value = ''
+      curlDialogVisible.value = true
+    }
+
+    const handleCurlImport = () => {
+      if (!curlContent.value) {
+        ElMessage.warning('请输入 cURL 内容')
+        return
+      }
+
+      try {
+        const parsed = parseCurlCommand(curlContent.value)
+        
+        // 填充表单
+        apiConfig.url = parsed.url || apiConfig.url
+        apiConfig.method = parsed.method || 'GET'
+        
+        if (parsed.headers) {
+          apiConfig.headers = Object.entries(parsed.headers).map(([key, value]) => ({
+            key,
+            value
+          }))
+        }
+        
+        if (parsed.body) {
+          // 检查是否是multipart/form-data格式
+          const contentType = parsed.headers['Content-Type'] || ''
+          if (contentType.includes('multipart/form-data') || parsed.body.includes('WebKitFormBoundary')) {
+            // 解析multipart/form-data格式
+            apiConfig.bodyParams = parseMultipartFormData(parsed.body)
+          } else {
+            // 尝试解析JSON并转换为key-value数组
+            try {
+              const jsonBody = JSON.parse(parsed.body)
+              apiConfig.bodyParams = Object.entries(jsonBody).map(([key, value]) => ({
+                key,
+                value: typeof value === 'object' ? JSON.stringify(value) : String(value)
+              }))
+            } catch (e) {
+              // 如果不是JSON格式，尝试解析URL编码的表单数据
+              if (parsed.body.includes('=')) {
+                try {
+                  const params = new URLSearchParams(parsed.body)
+                  apiConfig.bodyParams = Array.from(params.entries()).map(([key, value]) => ({
+                    key,
+                    value
+                  }))
+                } catch (e2) {
+                  // 最后作为单个参数处理
+                  apiConfig.bodyParams = [{ key: 'data', value: parsed.body }]
+                }
+              } else {
+                apiConfig.bodyParams = [{ key: 'data', value: parsed.body }]
+              }
+            }
+          }
+        }
+        
+        ElMessage.success('导入成功')
+        curlDialogVisible.value = false
+      } catch (error) {
+        ElMessage.error('解析 cURL 失败: ' + error.message)
+      }
+    }
+
+    // 解析multipart/form-data格式的body
+    const parseMultipartFormData = (body) => {
+      const params = []
+      
+      // 用boundary分割
+      const boundaryMatch = body.match(/------WebKitFormBoundary[\w]*/)
+      if (boundaryMatch) {
+        const boundary = boundaryMatch[0]
+        const parts = body.split(boundary)
+        
+        for (const part of parts) {
+          const nameMatch = part.match(/name="([^"]+)"/)
+          if (nameMatch) {
+            const fieldName = nameMatch[1]
+            
+            // 查找name="xxx"的结束位置
+            const nameEndIndex = part.indexOf(nameMatch[0]) + nameMatch[0].length
+            const afterName = part.substring(nameEndIndex)
+            
+            // $'...'格式处理后，\r\n变成了rn（字面两个字符）
+            // 所以双换行是 rnrn
+            let value = ''
+            
+            // 尝试多种分隔符格式
+            const separators = ['rnrn', '\r\n\r\n', '\n\n']
+            let foundSep = null
+            let sepIndex = -1
+            
+            for (const sep of separators) {
+              const idx = afterName.indexOf(sep)
+              if (idx !== -1) {
+                foundSep = sep
+                sepIndex = idx
+                break
+              }
+            }
+            
+            if (sepIndex !== -1 && foundSep) {
+              // 值从分隔符之后开始
+              let valueStr = afterName.substring(sepIndex + foundSep.length)
+              
+              // 值到下一个换行符结束（rn 或 \n）
+              const rnIndex = valueStr.indexOf('rn')
+              const lfIndex = valueStr.indexOf('\n')
+              
+              let endIndex = -1
+              if (rnIndex !== -1 && lfIndex !== -1) {
+                endIndex = Math.min(rnIndex, lfIndex)
+              } else if (rnIndex !== -1) {
+                endIndex = rnIndex
+              } else if (lfIndex !== -1) {
+                endIndex = lfIndex
+              }
+              
+              if (endIndex !== -1) {
+                value = valueStr.substring(0, endIndex)
+              } else {
+                value = valueStr
+              }
+              
+              // 清理
+              value = value.replace(/^-+$/, '').trim()
+            }
+            
+            params.push({ key: fieldName, value })
+          }
+        }
+      }
+      
+      // 兜底
+      if (params.length === 0) {
+        const simpleRegex = /name="([^"]+)"/g
+        let match
+        while ((match = simpleRegex.exec(body)) !== null) {
+          params.push({ key: match[1], value: '' })
+        }
+      }
+      
+      console.log('multipart解析结果:', params)
+      return params.length > 0 ? params : [{ key: 'formData', value: body }]
+    }
+
+    // 辅助函数：提取引号内容（支持普通引号和$'...'格式）
+    const extractQuotedContent = (str, startIndex) => {
+      if (startIndex >= str.length) return null
+      
+      // 跳过空白
+      while (startIndex < str.length && /\s/.test(str[startIndex])) {
+        startIndex++
+      }
+      
+      if (startIndex >= str.length) return null
+      
+      let quote = str[startIndex]
+      let isDollarQuote = false
+      
+      // 检查是否是 $'...' 格式
+      if (quote === '$' && str[startIndex + 1] === "'") {
+        isDollarQuote = true
+        quote = "'"
+        startIndex += 2
+      } else if (quote === "'" || quote === '"') {
+        startIndex++
+      } else {
+        // 无引号，匹配到空格或选项
+        let end = startIndex
+        while (end < str.length && !/\s/.test(str[end])) {
+          end++
+        }
+        return { content: str.slice(startIndex, end), endIndex: end }
+      }
+      
+      // 查找结束引号
+      let content = ''
+      let i = startIndex
+      while (i < str.length) {
+        if (str[i] === '\\' && i + 1 < str.length) {
+          // 处理转义
+          content += str[i + 1]
+          i += 2
+        } else if (str[i] === quote) {
+          return { content, endIndex: i + 1 }
+        } else {
+          content += str[i]
+          i++
+        }
+      }
+      // 没找到结束引号，返回剩余内容
+      return { content, endIndex: str.length }
+    }
+
+    // 简易的 cURL 解析器
+    const parseCurlCommand = (curl) => {
+      const result = {
+        url: '',
+        method: '',
+        headers: {},
+        body: '',
+        cookies: ''
+      }
+
+      // 移除换行符和反斜杠，合并为一行（保留$'...'内的换行）
+      let cmd = curl.replace(/\\\s*[\r\n]+/g, ' ').trim()
+      
+      // 提取 URL
+      const urlMatch = cmd.match(/curl\s+['"](https?:\/\/[^'"]+)['"]/) || 
+                       cmd.match(/curl\s+(https?:\/\/[^\s]+)/) ||
+                       cmd.match(/['"](https?:\/\/[^'"]+)['"]/) || 
+                       cmd.match(/(https?:\/\/[^\s]+)/)
+      if (urlMatch) {
+        result.url = urlMatch[1]
+      }
+
+      // 提取 Method
+      const methodMatch = cmd.match(/(-X|--request)\s+['"]?([A-Z]+)['"]?/)
+      if (methodMatch) {
+        result.method = methodMatch[2]
+      }
+
+      // 提取 Headers (-H 'Key: Value' 或 -H $'Key: Value')
+      const headerRegex = /-H\s+(\$?['"])/g
+      let match
+      while ((match = headerRegex.exec(cmd)) !== null) {
+        const extracted = extractQuotedContent(cmd, match.index + 3)
+        if (extracted) {
+          const headerStr = extracted.content
+          const separatorIndex = headerStr.indexOf(':')
+          if (separatorIndex > -1) {
+            const key = headerStr.slice(0, separatorIndex).trim()
+            const value = headerStr.slice(separatorIndex + 1).trim()
+            result.headers[key] = value
+          }
+        }
+      }
+
+      // 提取 Cookie (-b 或 --cookie)，支持 $'...' 格式
+      const cookiePatterns = [
+        /(-b|--cookie)\s+\$'([^'\\]*(?:\\.[^'\\]*)*)'/,  // $'...' 格式
+        /(-b|--cookie)\s+'([^']*)'/,                      // 单引号格式
+        /(-b|--cookie)\s+"([^"]*)"/                       // 双引号格式
+      ]
+      for (const pattern of cookiePatterns) {
+        const cookieMatch = cmd.match(pattern)
+        if (cookieMatch) {
+          result.cookies = cookieMatch[2]
+          result.headers['Cookie'] = result.cookies
+          break
+        }
+      }
+
+      // 提取 Body (--data, -d, --data-raw, --data-binary)
+      let bodyExtracted = false
+      const dataKeywords = ['--data-raw', '--data-binary', '--data', '-d']
+      
+      for (const keyword of dataKeywords) {
+        const keywordIndex = cmd.indexOf(keyword)
+        if (keywordIndex !== -1) {
+          const extracted = extractQuotedContent(cmd, keywordIndex + keyword.length)
+          if (extracted && extracted.content) {
+            result.body = extracted.content
+            bodyExtracted = true
+            break
+          }
+        }
+      }
+
+      // 根据是否有body来决定默认method
+      if (!result.method) {
+        result.method = bodyExtracted ? 'POST' : 'GET'
+      }
+
+      if (!result.url) {
+        throw new Error('未找到有效的 URL')
+      }
+
+      console.log('cURL解析结果:', result)  // 调试日志
+      return result
+    }
 
     // 计算属性：判断是否为Apollo类型
     const isApolloType = computed(() => {
@@ -817,7 +1177,8 @@ export default {
           'Authorization': 'Bearer your-token',
           'Content-Type': 'application/json'
         },
-        timeout: 30
+        timeout: 30,
+        ignoreSSL: false
       },
       APOLLO: {
         serverUrl: 'http://apollo.example.com:8080',
@@ -847,7 +1208,8 @@ export default {
         '确保接口地址可访问且返回配置数据',
         '支持各种HTTP方法和自定义请求头',
         '返回的JSON数据会作为配置内容',
-        '建议配置重试机制提高成功率'
+        '建议配置重试机制提高成功率',
+        '如遇内网自签名证书错误，请勾选"忽略SSL证书"'
       ],
       APOLLO: [
         '确保Apollo服务可访问且应用已注册',
@@ -1040,11 +1402,36 @@ export default {
                 })
                 break
               case 'API':
+                // 处理headers：如果是对象格式转换为数组
+                let headers = []
+                if (config.headers) {
+                  if (Array.isArray(config.headers)) {
+                    headers = config.headers
+                  } else {
+                    headers = Object.entries(config.headers).map(([key, value]) => ({ key, value }))
+                  }
+                }
+                // 处理body：如果是字符串格式转换为key-value数组
+                let bodyParams = []
+                if (config.body) {
+                  try {
+                    const bodyObj = typeof config.body === 'string' ? JSON.parse(config.body) : config.body
+                    bodyParams = Object.entries(bodyObj).map(([key, value]) => ({
+                      key,
+                      value: typeof value === 'object' ? JSON.stringify(value) : String(value)
+                    }))
+                  } catch (e) {
+                    bodyParams = [{ key: 'data', value: config.body }]
+                  }
+                }
                 Object.assign(apiConfig, {
                   url: config.url || '',
                   method: config.method || 'GET',
-                  headers: config.headers || [],
-                  timeout: config.timeout || 30
+                  headers: headers,
+                  bodyParams: bodyParams,
+                  timeout: config.timeout || 30,
+                  retryCount: config.retryCount || 3,
+                  ignoreSSL: config.ignoreSSL || false
                 })
                 break
               case 'APOLLO':
@@ -1127,7 +1514,7 @@ export default {
         }
         
         // 生成模板内容JSON
-        const templateContent = generateConfig()
+        const templateContent = generateConfig.value
         console.log('生成的模板配置:', templateContent)
         
         submitLoading.value = true
@@ -1230,9 +1617,10 @@ export default {
         url: '',
         method: 'GET',
         headers: [],
-        body: '',
+        bodyParams: [],
         timeout: 30,
-        retryCount: 3
+        retryCount: 3,
+        ignoreSSL: false
       })
       Object.assign(apolloConfig, {
         serverUrl: '',
@@ -1262,6 +1650,28 @@ export default {
       apiConfig.headers.splice(index, 1)
     }
 
+    // 添加请求体参数
+    const addBodyParam = () => {
+      apiConfig.bodyParams.push({ key: '', value: '' })
+    }
+
+    // 删除请求体参数
+    const removeBodyParam = (index) => {
+      apiConfig.bodyParams.splice(index, 1)
+    }
+
+    // 判断是否可以测试连接
+    // HTTP类型：只要有URL就可以测试（服务器可选）
+    // 其他类型：必须选择服务器
+    const canTestConnection = computed(() => {
+      if (form.templateType === 'API') {
+        // HTTP类型只需要有URL即可测试
+        return !!apiConfig.url
+      }
+      // 其他类型需要选择服务器
+      return !!testServerId.value
+    })
+
     // 生成配置JSON
     const generateConfig = computed(() => {
       switch (form.templateType) {
@@ -1281,7 +1691,9 @@ export default {
           const config = {
             url: apiConfig.url,
             method: apiConfig.method,
-            timeout: apiConfig.timeout
+            timeout: apiConfig.timeout,
+            retryCount: apiConfig.retryCount,
+            ignoreSSL: apiConfig.ignoreSSL
           }
           if (apiConfig.headers.length > 0) {
             const headers = {}
@@ -1294,8 +1706,16 @@ export default {
               config.headers = headers
             }
           }
-          if (['POST', 'PUT'].includes(apiConfig.method) && apiConfig.body) {
-            config.body = apiConfig.body
+          if (['POST', 'PUT'].includes(apiConfig.method) && apiConfig.bodyParams.length > 0) {
+            const body = {}
+            apiConfig.bodyParams.forEach(p => {
+              if (p.key) {
+                body[p.key] = p.value
+              }
+            })
+            if (Object.keys(body).length > 0) {
+              config.body = JSON.stringify(body)
+            }
           }
           return config
         case 'APOLLO':
@@ -1441,8 +1861,15 @@ export default {
         return
       }
       
-      if (!testServerId.value) {
+      // HTTP类型可以不选择服务器直接测试，其他类型必须选择服务器
+      if (!testServerId.value && form.templateType !== 'API') {
         ElMessage.warning('请选择测试服务器')
+        return
+      }
+      
+      // HTTP类型需要有URL才能测试
+      if (form.templateType === 'API' && !apiConfig.url) {
+        ElMessage.warning('请输入接口地址')
         return
       }
 
@@ -1456,7 +1883,7 @@ export default {
         
         // 调用后端测试连接API
         const requestData = {
-          serverId: testServerId.value
+          serverId: testServerId.value || null  // HTTP类型可以为空
         }
         
         // 始终传递动态配置参数，以便使用实时输入的配置进行测试
@@ -1562,6 +1989,11 @@ export default {
       testServerList,
       isApolloType,
       typeDescriptions,
+      // cURL 导入相关
+      curlDialogVisible,
+      curlContent,
+      openCurlImport,
+      handleCurlImport,
       // 测试结果相关
       testResultVisible,
       testResult,
@@ -1583,7 +2015,10 @@ export default {
       refreshTestServerList,
       addHeader,
       removeHeader,
+      addBodyParam,
+      removeBodyParam,
       // 工具方法
+      canTestConnection,
       generateConfig,
       formatJson,
       getConfigExample,
@@ -1603,7 +2038,8 @@ export default {
       Cpu,
       Document,
       Connection,
-      Setting
+      Setting,
+      DocumentCopy
     }
   }
 }
@@ -1703,6 +2139,14 @@ export default {
 
   .headers-config {
     .header-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+  }
+
+  .body-config {
+    .body-item {
       display: flex;
       align-items: center;
       margin-bottom: 8px;

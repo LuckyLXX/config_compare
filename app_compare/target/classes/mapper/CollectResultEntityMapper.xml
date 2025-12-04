@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.config.compare.mapper.CollectResultEntityMapper">
+
+    <!-- 查询每个任务的最新采集结果（分页）- 兼容MySQL 5.x -->
+    <select id="selectLatestResultsWithTask" resultType="java.util.Map">
+        SELECT 
+            t.id AS taskId,
+            t.task_name AS taskName,
+            t.system_id AS systemId,
+            s.system_name AS systemName,
+            e.execute_id AS executeId,
+            e.execute_status AS executeStatus,
+            e.start_time AS collectTime,
+            e.total_servers AS totalServers,
+            e.success_servers AS successServers,
+            e.failed_servers AS failedServers,
+            r.collect_type AS collectType,
+            r.collect_content AS content,
+            LENGTH(r.collect_content) AS dataSize
+        FROM collect_task t
+        LEFT JOIN sys_system_info s ON t.system_id = s.id
+        LEFT JOIN collect_execution e ON e.task_id = t.id 
+            AND e.execute_status IN (1, 2, 3)
+            AND e.start_time = (
+                SELECT MAX(e2.start_time) 
+                FROM collect_execution e2 
+                WHERE e2.task_id = t.id AND e2.execute_status IN (1, 2, 3)
+            )
+        LEFT JOIN collect_result r ON r.execute_id = e.execute_id 
+            AND r.collect_status = 1
+            AND r.execute_time = (
+                SELECT MAX(r2.execute_time) 
+                FROM collect_result r2 
+                WHERE r2.execute_id = e.execute_id AND r2.collect_status = 1
+            )
+        WHERE t.status = 1
+        <if test="taskName != null and taskName != ''">
+            AND t.task_name LIKE CONCAT('%', #{taskName}, '%')
+        </if>
+        <if test="collectType != null and collectType != ''">
+            AND r.collect_type = #{collectType}
+        </if>
+        <if test="systemId != null">
+            AND t.system_id = #{systemId}
+        </if>
+        AND e.execute_id IS NOT NULL
+        ORDER BY e.start_time DESC
+    </select>
+
+</mapper>

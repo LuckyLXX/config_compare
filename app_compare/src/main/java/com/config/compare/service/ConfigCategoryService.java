@@ -2,7 +2,7 @@ package com.config.compare.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.config.compare.common.request.PageRequest;
+import com.config.compare.common.request.CategoryPageRequest;
 import com.config.compare.entity.ConfigCategory;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public interface ConfigCategoryService extends IService<ConfigCategory> {
      * @param pageRequest 分页请求参数
      * @return 分页结果
      */
-    IPage<ConfigCategory> pageQuery(PageRequest pageRequest);
+    IPage<ConfigCategory> pageQuery(CategoryPageRequest pageRequest);
 
     /**
      * 获取所有启用的配置分类（平铺列表）

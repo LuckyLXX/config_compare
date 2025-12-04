@@ -9,7 +9,6 @@ import com.config.compare.entity.CompareExecution;
 import com.config.compare.entity.CompareResult;
 import com.config.compare.entity.ConfigBaseline;
 import com.config.compare.entity.ServerInstance;
-import com.config.compare.entity.CollectTask;
 import com.config.compare.entity.CollectResultEntity;
 import com.config.compare.entity.CollectExecution;
 import com.config.compare.mapper.CompareTaskMapper;
@@ -313,17 +312,57 @@ public class CompareTaskServiceImpl extends ServiceImpl<CompareTaskMapper, Compa
 
     /**
      * 获取任务的基线配置
+     * 智能基线选择逻辑：
+     * 1. 如果任务指定了baselineId，先检查该基线是否仍然是有效的默认基线
+     * 2. 如果指定的基线已被归档（status=2）或不再是默认（isDefault=0），则自动使用最新的默认基线
+     * 3. 如果任务没有指定baselineId，直接使用最新的默认基线
      */
     private ConfigBaseline getBaselineForTask(CompareTask task) {
         try {
+            ConfigBaseline baseline = null;
+            
             if (task.getBaselineId() != null) {
-                // 使用指定的基线
-                return configBaselineService.getById(task.getBaselineId());
-            } else {
-                // 使用默认基线（根据系统ID和分类ID查找）
-                // TODO: 需要传入serverTypeId，暂时使用null
-                return configBaselineService.getDefaultBaseline(task.getSystemId(), null, task.getCategoryId());
+                // 查询指定的基线
+                baseline = configBaselineService.getById(task.getBaselineId());
+                
+                if (baseline != null) {
+                    // 检查指定的基线是否仍然有效
+                    if (baseline.getStatus() == 2) {
+                        // 基线已被归档，说明已经被晋级替换
+                        log.warn("⚠️ 任务[{}]指定的基线[ID={}, 版本={}]已被归档，自动切换到最新默认基线", 
+                            task.getTaskName(), baseline.getId(), baseline.getBaselineVersion());
+                        baseline = null; // 重置，后续会查询默认基线
+                    } else if (baseline.getIsDefault() == 0) {
+                        // 基线不再是默认基线
+                        log.warn("⚠️ 任务[{}]指定的基线[ID={}, 版本={}]不再是默认基线，自动切换到最新默认基线", 
+                            task.getTaskName(), baseline.getId(), baseline.getBaselineVersion());
+                        baseline = null; // 重置，后续会查询默认基线
+                    } else {
+                        // 基线仍然有效，使用它
+                        log.info("✅ 任务[{}]使用指定基线: ID={}, 版本={}, 名称={}", 
+                            task.getTaskName(), baseline.getId(), baseline.getBaselineVersion(), baseline.getBaselineName());
+                    }
+                } else {
+                    log.warn("⚠️ 任务[{}]指定的基线[ID={}]不存在，自动切换到最新默认基线", 
+                        task.getTaskName(), task.getBaselineId());
+                }
             }
+            
+            // 如果没有指定基线，或指定的基线已失效，则使用默认基线
+            if (baseline == null) {
+                baseline = configBaselineService.getDefaultBaselineWithoutServerType(
+                    task.getSystemId(), task.getCategoryId());
+                
+                if (baseline != null) {
+                    log.info("✅ 任务[{}]使用最新默认基线: ID={}, 版本={}, 名称={}", 
+                        task.getTaskName(), baseline.getId(), baseline.getBaselineVersion(), baseline.getBaselineName());
+                } else {
+                    log.error("❌ 任务[{}]未找到可用基线！系统ID={}, 配置分类ID={}", 
+                        task.getTaskName(), task.getSystemId(), task.getCategoryId());
+                }
+            }
+            
+            return baseline;
         } catch (Exception e) {
             log.error("获取基线配置失败: taskId={}", task.getId(), e);
             return null;
@@ -772,6 +811,14 @@ public class CompareTaskServiceImpl extends ServiceImpl<CompareTaskMapper, Compa
             detail.setCurrentValue(diffItem.getCurrentValue());
             detail.setSuggestAction(diffItem.getSuggestAction());
             detail.setDiffPath(diffItem.getDiffPath());
+            
+            // 设置新增的行号字段
+            // detail.setBaselineLineNumber(diffItem.getBaselineLineNumber());
+            // detail.setCurrentLineNumber(diffItem.getCurrentLineNumber());
+            
+            // 设置行内差异信息
+            // detail.setInlineDiffJson(diffItem.getInlineDiffJson());
+            
             details.add(detail);
         }
         

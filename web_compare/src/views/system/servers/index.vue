@@ -446,28 +446,40 @@ export default {
 
     // 获取数据
     const fetchData = async () => {
-      await Promise.all([
-        fetchSystemList(),
-        fetchServerTypeList(),
-        fetchServerList()
-      ])
+      // 顺序加载数据，避免竞争条件
+      try {
+        await fetchSystemList()
+        await fetchServerTypeList()
+        await fetchServerList()
+      } catch (error) {
+        console.error('加载数据失败:', error)
+      }
     }
 
     const fetchSystemList = async () => {
       try {
+        console.log('[DEBUG] 开始获取系统列表...')
         // 优先调用不分页接口
         const respAll = await systemApi.getAllSystemList()
+        console.log('[DEBUG] 系统列表API响应:', respAll)
+        
         const listAll = respAll?.data ?? respAll ?? []
         let parsed = Array.isArray(listAll) ? listAll : (listAll.records || [])
-
+        
         // 如果仍为空，回退到分页接口取大页
         if (!parsed || parsed.length === 0) {
+          console.log('[DEBUG] 系统列表为空，尝试分页接口...')
           const respPage = await systemApi.getSystemList({ current: 1, size: 1000 })
+          console.log('[DEBUG] 系统列表分页API响应:', respPage)
           const pageData = respPage?.data ?? respPage ?? {}
           parsed = pageData.records || []
         }
-
+        
+        console.log('[DEBUG] 最终系统列表数据:', parsed)
         systemList.value = parsed
+        
+        // 强制触发Vue响应式更新
+        await new Promise(resolve => setTimeout(resolve, 0))
       } catch (error) {
         console.error('获取系统列表失败:', error)
         systemList.value = []
@@ -476,10 +488,17 @@ export default {
 
     const fetchServerTypeList = async () => {
       try {
+        console.log('[DEBUG] 开始获取服务器类型列表...')
         const response = await serverTypeApi.getServerTypeList()
+        console.log('[DEBUG] 服务器类型API响应:', response)
+        
         // 兼容后端返回格式：可能是 {data: [...]} 或直接数组
         const list = response?.data ?? response ?? []
         serverTypeList.value = Array.isArray(list) ? list : (list.records || [])
+        console.log('[DEBUG] 最终服务器类型列表:', serverTypeList.value)
+        
+        // 强制触发Vue响应式更新
+        await new Promise(resolve => setTimeout(resolve, 0))
       } catch (error) {
         console.error('获取服务器类型列表失败:', error)
         serverTypeList.value = []
@@ -725,8 +744,11 @@ export default {
       fetchServerList()
     }
 
-    onMounted(() => {
-      fetchData()
+    onMounted(async () => {
+      console.log('[DEBUG] 服务器管理页面组件挂载，开始加载数据...')
+      await fetchData()
+      console.log('[DEBUG] 数据加载完成，当前系统列表:', systemList.value)
+      console.log('[DEBUG] 数据加载完成，当前服务器类型列表:', serverTypeList.value)
     })
 
     return {

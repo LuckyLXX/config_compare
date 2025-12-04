@@ -53,15 +53,12 @@
       </el-form>
     </div>
 
-    <!-- 分类树形表格 -->
+    <!-- 分类表格 -->
     <div class="app-card">
       <el-table
         v-loading="loading"
         :data="categoryList"
         style="width: 100%"
-        row-key="id"
-        :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
-        default-expand-all
       >
         <el-table-column prop="categoryName" label="分类名称" min-width="200" />
         <el-table-column prop="categoryCode" label="分类编码" width="150" />
@@ -90,15 +87,11 @@
         </el-table-column>
         <el-table-column prop="sortOrder" label="排序" width="80" />
         <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>
               编辑
-            </el-button>
-            <el-button link type="success" size="small" @click="handleAddChild(row)">
-              <el-icon><Plus /></el-icon>
-              添加子类
             </el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>
@@ -107,6 +100,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="app-pagination">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @current-change="handleCurrentChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </div>
 
     <!-- 新增/编辑对话框 -->
@@ -128,17 +134,6 @@
         </el-form-item>
         <el-form-item label="分类编码" prop="categoryCode">
           <el-input v-model="form.categoryCode" placeholder="请输入分类编码" />
-        </el-form-item>
-        <el-form-item label="父分类" prop="parentId">
-          <el-tree-select
-            v-model="form.parentId"
-            :data="categoryTreeData"
-            :props="treeSelectProps"
-            check-strictly
-            placeholder="请选择父分类（不选择为顶级分类）"
-            clearable
-            style="width: 100%"
-          />
         </el-form-item>
         <el-form-item label="适用服务器类型" prop="applicableTypes">
           <el-select
@@ -192,7 +187,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { categoryApi } from '@/api/baseline'
 import { serverTypeApi } from '@/api/system'
@@ -216,13 +211,15 @@ export default {
     // 数据列表
     const categoryList = ref([])
     const serverTypeList = ref([])
+    const total = ref(0)
+    const currentPage = ref(1)
+    const pageSize = ref(10)
 
     // 表单数据
     const form = reactive({
       id: null,
       categoryName: '',
       categoryCode: '',
-      parentId: null,
       applicableTypes: [],
       description: '',
       sortOrder: 0,
@@ -241,33 +238,6 @@ export default {
       ]
     }
 
-    // 树形选择器配置
-    const treeSelectProps = {
-      value: 'id',
-      label: 'categoryName',
-      children: 'children'
-    }
-
-    // 计算属性：用于树形选择器的数据
-    const categoryTreeData = computed(() => {
-      return buildTreeData(categoryList.value.filter(item => !form.id || item.id !== form.id))
-    })
-
-    // 构建树形数据
-    const buildTreeData = (list, parentId = 0) => {
-      const result = []
-      list.forEach(item => {
-        if (item.parentId === parentId) {
-          const children = buildTreeData(list, item.id)
-          if (children.length) {
-            item.children = children
-          }
-          result.push(item)
-        }
-      })
-      return result
-    }
-
     // 获取服务器类型列表
     const fetchServerTypeList = async () => {
       try {
@@ -284,8 +254,19 @@ export default {
     const fetchCategoryList = async () => {
       loading.value = true
       try {
-        const response = await categoryApi.getAllCategoryList()
-        const categoryData = response.data || []
+        const params = {
+          current: currentPage.value,
+          size: pageSize.value,
+          categoryName: searchForm.categoryName || undefined,
+          categoryCode: searchForm.categoryCode || undefined,
+          status: searchForm.status !== '' ? searchForm.status : undefined
+        }
+        
+        console.log('查询参数:', params)
+        
+        const response = await categoryApi.getCategoryPage(params)
+        const pageData = response.data || {}
+        const categoryData = pageData.records || []
         
         // 处理适用类型显示
         categoryData.forEach(category => {
@@ -297,11 +278,13 @@ export default {
           }
         })
         
-        categoryList.value = buildTreeData(categoryData)
+        categoryList.value = categoryData
+        total.value = pageData.total || 0
       } catch (error) {
         console.error('获取配置分类失败:', error)
         ElMessage.error('获取配置分类失败')
         categoryList.value = []
+        total.value = 0
       } finally {
         loading.value = false
       }
@@ -319,7 +302,21 @@ export default {
         categoryCode: '',
         status: ''
       })
+      currentPage.value = 1
       handleSearch()
+    }
+
+    // 页码变化
+    const handleCurrentChange = (page) => {
+      currentPage.value = page
+      fetchCategoryList()
+    }
+
+    // 页面大小变化
+    const handleSizeChange = (size) => {
+      pageSize.value = size
+      currentPage.value = 1
+      fetchCategoryList()
     }
 
     // 新增
@@ -327,14 +324,6 @@ export default {
       isEdit.value = false
       dialogVisible.value = true
       resetForm()
-    }
-
-    // 添加子分类
-    const handleAddChild = (row) => {
-      isEdit.value = false
-      dialogVisible.value = true
-      resetForm()
-      form.parentId = row.id
     }
 
     // 编辑
@@ -351,7 +340,7 @@ export default {
     const handleDelete = async (row) => {
       try {
         await ElMessageBox.confirm(
-          `确定要删除分类"${row.categoryName}"吗？`,
+          `确定要删除分类"${row.categoryName}"吗？删除后将无法恢复。`,
           '删除确认',
           {
             confirmButtonText: '确定',
@@ -360,11 +349,15 @@ export default {
           }
         )
         
+        // 调用后端API删除
+        await categoryApi.deleteCategory(row.id)
+        
         ElMessage.success('删除成功')
         fetchCategoryList()
       } catch (error) {
         if (error !== 'cancel') {
-          ElMessage.error('删除失败')
+          console.error('删除分类失败:', error)
+          ElMessage.error(error.response?.data?.message || '删除失败')
         }
       }
     }
@@ -412,7 +405,6 @@ export default {
         id: null,
         categoryName: '',
         categoryCode: '',
-        parentId: null,
         applicableTypes: [],
         description: '',
         sortOrder: 0,
@@ -434,14 +426,16 @@ export default {
       searchForm,
       categoryList,
       serverTypeList,
+      total,
+      currentPage,
+      pageSize,
       form,
       rules,
-      treeSelectProps,
-      categoryTreeData,
       handleSearch,
       handleReset,
+      handleCurrentChange,
+      handleSizeChange,
       handleAdd,
-      handleAddChild,
       handleEdit,
       handleDelete,
       handleSubmit,

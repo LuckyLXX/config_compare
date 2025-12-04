@@ -1,6 +1,7 @@
 package com.config.compare.compare.algorithm.impl;
 
 import com.config.compare.compare.algorithm.CompareAlgorithm;
+import com.config.compare.compare.model.AlignedLine;
 import com.config.compare.compare.model.CompareContext;
 import com.config.compare.compare.model.CompareResultModel;
 import com.config.compare.compare.model.DiffItem;
@@ -43,8 +44,23 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
             
             // 添加详细的调试日志
             log.info("=== 比对内容详情 ===");
-            log.info("基线内容：\n{}", context.getBaselineContent());
-            log.info("当前内容：\n{}", context.getCurrentContent());
+            log.info("基线内容长度：{}", context.getBaselineContent() != null ? context.getBaselineContent().length() : 0);
+            log.info("当前内容长度：{}", context.getCurrentContent() != null ? context.getCurrentContent().length() : 0);
+            
+            // 检查是否为XML内容
+            boolean isXmlBaseline = isXmlContent(context.getBaselineContent());
+            boolean isXmlCurrent = isXmlContent(context.getCurrentContent());
+            log.info("基线是否为XML：{}", isXmlBaseline);
+            log.info("当前是否为XML：{}", isXmlCurrent);
+            
+            // 只记录前500字符避免日志过长
+            String baselinePreview = context.getBaselineContent() != null && context.getBaselineContent().length() > 500 ?
+                context.getBaselineContent().substring(0, 500) + "..." : context.getBaselineContent();
+            String currentPreview = context.getCurrentContent() != null && context.getCurrentContent().length() > 500 ?
+                context.getCurrentContent().substring(0, 500) + "..." : context.getCurrentContent();
+            
+            log.info("基线内容前500字符：\n{}", baselinePreview);
+            log.info("当前内容前500字符：\n{}", currentPreview);
             log.info("==================");
             
             CompareResultModel result = doTextCompare(context);
@@ -106,9 +122,27 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
         // 获取比对规则
         Map<String, Object> compareRules = context.getCompareRules();
         
+        // 检测并规范化JSON内容
+        boolean isJson = isJsonContent(baseline) && isJsonContent(current);
+        if (isJson) {
+            log.info("🔍 检测到JSON内容，进行格式规范化");
+            baseline = normalizeJsonFormat(baseline);
+            current = normalizeJsonFormat(current);
+        }
+        
         // 按行分割内容
         List<String> baselineLines = splitLines(baseline);
         List<String> currentLines = splitLines(current);
+        
+        log.info("🔍 行分割结果：基线行数={}，当前行数={}", baselineLines.size(), currentLines.size());
+        log.info("🔍 基线前10行：");
+        for (int i = 0; i < Math.min(10, baselineLines.size()); i++) {
+            log.info("  基线行{}: '{}'", i + 1, baselineLines.get(i));
+        }
+        log.info("🔍 当前前10行：");
+        for (int i = 0; i < Math.min(10, currentLines.size()); i++) {
+            log.info("  当前行{}: '{}'", i + 1, currentLines.get(i));
+        }
         
         CompareResultModel result = CompareResultModel.success(false);
         
@@ -165,13 +199,17 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
         }
         
         // 使用Myers差分算法进行行比对
-        List<DiffLine> diffLines = computeDiffLines(processedBaselineLines, processedCurrentLines);
+        List<MyersDiffAlgorithm.DiffOp> diffOps = MyersDiffAlgorithm.computeDiff(processedBaselineLines, processedCurrentLines);
+        List<DiffLine> diffLines = convertMyersDiffToDiffLines(diffOps, processedBaselineLines, processedCurrentLines);
         
         log.info("计算出的差异行数: {}", diffLines.size());
         for (DiffLine diffLine : diffLines) {
             log.info("差异行: type={}, baselineIndex={}, currentIndex={}, baselineValue='{}', currentValue='{}'", 
                     diffLine.type, diffLine.baselineIndex, diffLine.currentIndex, diffLine.baselineValue, diffLine.currentValue);
         }
+        
+        // 【新增】生成完整的对齐行信息供前端使用
+        generateAlignedLines(diffLines, result);
         
         // 生成差异项
         generateDiffItems(diffLines, baselineLines, currentLines, result);
@@ -255,37 +293,191 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
     }
 
     /**
-     * 计算行差异（行号对齐方式）
+     * 计算行差异（使用LCS算法进行精确比对）
      */
     private List<DiffLine> computeDiffLines(List<String> baselineLines, List<String> currentLines) {
-        List<DiffLine> diffLines = new ArrayList<>();
+        // 检查是否为XML内容，如果是则使用专门的XML比对算法
+        boolean isXmlBaseline = isXmlContent(baselineLines);
+        boolean isXmlCurrent = isXmlContent(currentLines);
         
-        // 使用行号对齐的方式，总行数取较大的
-        int maxLines = Math.max(baselineLines.size(), currentLines.size());
+        log.info("🔍 内容类型检测：基线是XML={}，当前是XML={}", isXmlBaseline, isXmlCurrent);
         
-        for (int i = 0; i < maxLines; i++) {
-            String baselineLine = i < baselineLines.size() ? baselineLines.get(i) : null;
-            String currentLine = i < currentLines.size() ? currentLines.get(i) : null;
+        List<DiffLine> diffLines;
+        
+        if (isXmlBaseline || isXmlCurrent) {
+            // 对于XML内容，使用专门的XML比对算法
+            log.info("🔍 使用XML专用比对算法");
+            diffLines = computeXmlDiffLines(baselineLines, currentLines);
+        } else {
+            // 对于普通文本，使用标准LCS算法
+            log.info("🔍 使用标准文本比对算法");
+            int[][] lcs = computeLCS(baselineLines, currentLines);
+            diffLines = backtrackLCS(lcs, baselineLines, currentLines,
+                                         baselineLines.size(), currentLines.size());
             
-            if (baselineLine == null && currentLine == null) {
-                // 两行都为空，不应该发生
-                continue;
-            } else if (baselineLine == null) {
-                // 基线没有，当前有 - 新增
-                diffLines.add(new DiffLine(DiffType.ADD, -1, i, null, currentLine));
-            } else if (currentLine == null) {
-                // 基线有，当前没有 - 删除
-                diffLines.add(new DiffLine(DiffType.DELETE, i, -1, baselineLine, null));
-            } else if (!baselineLine.equals(currentLine)) {
-                // 两行都有但内容不同 - 修改
-                diffLines.add(new DiffLine(DiffType.MODIFY, i, i, baselineLine, currentLine));
-            } else {
-                // 两行都有且内容相同 - 相同
-                diffLines.add(new DiffLine(DiffType.EQUAL, i, i, baselineLine, currentLine));
-            }
+            // 反转结果，因为回溯是从后往前的
+            Collections.reverse(diffLines);
+            
+            // 为差异行添加准确的行号映射
+            diffLines = enhanceDiffLinesWithLineNumbers(diffLines, baselineLines, currentLines);
         }
         
         return diffLines;
+    }
+    
+    /**
+     * 检查是否为XML内容（重载方法）
+     */
+    private boolean isXmlContent(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return false;
+        }
+        
+        String trimmed = content.trim();
+        // 检查XML声明或XML标签
+        return trimmed.startsWith("<?xml") ||
+               (trimmed.startsWith("<") && trimmed.contains(">")) ||
+               trimmed.contains("</") ||
+               trimmed.contains("<xml");
+    }
+    
+    /**
+     * 检查是否为XML内容
+     */
+    private boolean isXmlContent(List<String> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return false;
+        }
+        
+        // 查找第一个非空行
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed.startsWith("<?xml") ||
+                       (trimmed.startsWith("<") && trimmed.contains(">"));
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * 计算XML文件的行差异（优化版本）
+     */
+    private List<DiffLine> computeXmlDiffLines(List<String> baselineLines, List<String> currentLines) {
+        List<DiffLine> diffLines = new ArrayList<>();
+        int baselineIndex = 0;
+        int currentIndex = 0;
+        
+        // 使用改进的LCS算法，但保留原始行号信息
+        int[][] lcs = computeLCS(baselineLines, currentLines);
+        List<DiffLine> lcsDiffLines = backtrackLCS(lcs, baselineLines, currentLines,
+                                                  baselineLines.size(), currentLines.size());
+        Collections.reverse(lcsDiffLines);
+        
+        // 处理LCS结果，确保行号映射正确
+        for (DiffLine diffLine : lcsDiffLines) {
+            switch (diffLine.type) {
+                case EQUAL:
+                    diffLines.add(new DiffLine(DiffType.EQUAL, baselineIndex, currentIndex,
+                                              baselineLines.get(baselineIndex), currentLines.get(currentIndex)));
+                    baselineIndex++;
+                    currentIndex++;
+                    break;
+                    
+                case MODIFY:
+                    diffLines.add(new DiffLine(DiffType.MODIFY, baselineIndex, currentIndex,
+                                              baselineLines.get(baselineIndex), currentLines.get(currentIndex)));
+                    baselineIndex++;
+                    currentIndex++;
+                    break;
+                    
+                case DELETE:
+                    diffLines.add(new DiffLine(DiffType.DELETE, baselineIndex, currentIndex,
+                                              baselineLines.get(baselineIndex), ""));
+                    baselineIndex++;
+                    break;
+                    
+                case ADD:
+                    diffLines.add(new DiffLine(DiffType.ADD, baselineIndex, currentIndex,
+                                              "", currentLines.get(currentIndex)));
+                    currentIndex++;
+                    break;
+            }
+        }
+        
+        // 处理剩余的行
+        while (baselineIndex < baselineLines.size()) {
+            diffLines.add(new DiffLine(DiffType.DELETE, baselineIndex, currentIndex,
+                                      baselineLines.get(baselineIndex), ""));
+            baselineIndex++;
+        }
+        
+        while (currentIndex < currentLines.size()) {
+            diffLines.add(new DiffLine(DiffType.ADD, baselineIndex, currentIndex,
+                                      "", currentLines.get(currentIndex)));
+            currentIndex++;
+        }
+        
+        return diffLines;
+    }
+    
+    /**
+     * 增强差异行信息，添加准确的行号映射
+     */
+    private List<DiffLine> enhanceDiffLinesWithLineNumbers(List<DiffLine> diffLines,
+                                                          List<String> baselineLines, List<String> currentLines) {
+        List<DiffLine> enhancedLines = new ArrayList<>();
+        int baselineIndex = 0;
+        int currentIndex = 0;
+        
+        for (DiffLine diffLine : diffLines) {
+            switch (diffLine.type) {
+                case EQUAL:
+                    // 相同行，直接使用原始索引
+                    enhancedLines.add(new DiffLine(DiffType.EQUAL, baselineIndex, currentIndex,
+                                                diffLine.baselineValue, diffLine.currentValue));
+                    baselineIndex++;
+                    currentIndex++;
+                    break;
+                    
+                case MODIFY:
+                    // 修改行，使用当前索引
+                    enhancedLines.add(new DiffLine(DiffType.MODIFY, baselineIndex, currentIndex,
+                                                diffLine.baselineValue, diffLine.currentValue));
+                    baselineIndex++;
+                    currentIndex++;
+                    break;
+                    
+                case DELETE:
+                    // 删除行，基线有当前没有
+                    enhancedLines.add(new DiffLine(DiffType.DELETE, baselineIndex, -1,
+                                                diffLine.baselineValue, null));
+                    baselineIndex++;
+                    break;
+                    
+                case ADD:
+                    // 新增行，当前有基线没有
+                    enhancedLines.add(new DiffLine(DiffType.ADD, -1, currentIndex,
+                                                null, diffLine.currentValue));
+                    currentIndex++;
+                    break;
+            }
+        }
+        
+        // 处理剩余的行
+        while (baselineIndex < baselineLines.size()) {
+            enhancedLines.add(new DiffLine(DiffType.DELETE, baselineIndex, -1,
+                                        baselineLines.get(baselineIndex), null));
+            baselineIndex++;
+        }
+        
+        while (currentIndex < currentLines.size()) {
+            enhancedLines.add(new DiffLine(DiffType.ADD, -1, currentIndex,
+                                        null, currentLines.get(currentIndex)));
+            currentIndex++;
+        }
+        
+        return enhancedLines;
     }
 
     /**
@@ -312,68 +504,259 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
     }
 
     /**
-     * 回溯LCS结果
+     * 将Myers算法的DiffOp转换为DiffLine，并优化相邻的删除+插入为修改
      */
+    private List<DiffLine> convertMyersDiffToDiffLines(List<MyersDiffAlgorithm.DiffOp> diffOps, 
+                                                      List<String> baselineLines, 
+                                                      List<String> currentLines) {
+        List<DiffLine> diffLines = new ArrayList<>();
+        int baselineIndex = 0;
+        int currentIndex = 0;
+
+        for (int i = 0; i < diffOps.size(); i++) {
+            MyersDiffAlgorithm.DiffOp diffOp = diffOps.get(i);
+            
+            switch (diffOp.getOperation()) {
+                case EQUAL:
+                    diffLines.add(new DiffLine(DiffType.EQUAL, baselineIndex, currentIndex,
+                                             diffOp.getText(), diffOp.getText()));
+                    baselineIndex++;
+                    currentIndex++;
+                    break;
+
+                case DELETE:
+                    // 检查下一个操作是否是INSERT，如果是则考虑合并为MODIFY
+                    if (i + 1 < diffOps.size() && 
+                        diffOps.get(i + 1).getOperation() == MyersDiffAlgorithm.DiffOperation.INSERT) {
+                        
+                        MyersDiffAlgorithm.DiffOp nextOp = diffOps.get(i + 1);
+                        
+                        // 【修复】判断是否应该合并为MODIFY
+                        // 只有当DELETE和INSERT都有实质内容时才合并
+                        boolean deleteHasContent = diffOp.getText() != null && !diffOp.getText().trim().isEmpty();
+                        boolean insertHasContent = nextOp.getText() != null && !nextOp.getText().trim().isEmpty();
+                        
+                        if (deleteHasContent && insertHasContent) {
+                            // 两者都有实质内容，合并为MODIFY
+                            diffLines.add(new DiffLine(DiffType.MODIFY, baselineIndex, currentIndex,
+                                                     diffOp.getText(), nextOp.getText()));
+                            baselineIndex++;
+                            currentIndex++;
+                            i++; // 跳过下一个INSERT操作
+                        } else if (deleteHasContent && !insertHasContent) {
+                            // DELETE有内容，INSERT只是空白 -> 这是删除
+                            diffLines.add(new DiffLine(DiffType.DELETE, baselineIndex, -1,
+                                                     diffOp.getText(), ""));
+                            baselineIndex++;
+                            // 跳过空白的INSERT
+                            i++;
+                        } else if (!deleteHasContent && insertHasContent) {
+                            // DELETE只是空白，INSERT有内容 -> 这是新增
+                            diffLines.add(new DiffLine(DiffType.ADD, -1, currentIndex,
+                                                     "", nextOp.getText()));
+                            currentIndex++;
+                            // 跳过空白的DELETE，不增加baselineIndex
+                            i++;
+                        } else {
+                            // 两者都是空白，当作相同处理（不生成差异）
+                            baselineIndex++;
+                            currentIndex++;
+                            i++;
+                        }
+                    } else {
+                        diffLines.add(new DiffLine(DiffType.DELETE, baselineIndex, -1,
+                                                 diffOp.getText(), ""));
+                        baselineIndex++;
+                    }
+                    break;
+
+                case INSERT:
+                    // 如果前一个不是DELETE（已经被处理），则这是纯插入
+                    diffLines.add(new DiffLine(DiffType.ADD, -1, currentIndex,
+                                             "", diffOp.getText()));
+                    currentIndex++;
+                    break;
+            }
+        }
+
+        return diffLines;
+    }
+
+    /**
+     * 回溯LCS结果 (已弃用，使用Myers算法替代)
+     */
+    @Deprecated
     private List<DiffLine> backtrackLCS(int[][] lcs, List<String> baselineLines, List<String> currentLines, 
                                        int i, int j) {
         List<DiffLine> result = new ArrayList<>();
         
-        if (i == 0 || j == 0) {
-            return result;
+        // 处理边界情况
+        while (i > 0 && j > 0) {
+            if (baselineLines.get(i - 1).equals(currentLines.get(j - 1))) {
+                // 相同行
+                result.add(new DiffLine(DiffType.EQUAL, i - 1, j - 1, baselineLines.get(i - 1), currentLines.get(j - 1)));
+                i--;
+                j--;
+            } else if (lcs[i - 1][j] >= lcs[i][j - 1]) {
+                // 删除行（基线有，当前没有）
+                result.add(new DiffLine(DiffType.DELETE, i - 1, -1, baselineLines.get(i - 1), ""));
+                i--;
+            } else {
+                // 新增行（当前有，基线没有）
+                result.add(new DiffLine(DiffType.ADD, -1, j - 1, "", currentLines.get(j - 1)));
+                j--;
+            }
         }
         
-        if (baselineLines.get(i - 1).equals(currentLines.get(j - 1))) {
-            result.addAll(backtrackLCS(lcs, baselineLines, currentLines, i - 1, j - 1));
-            result.add(new DiffLine(DiffType.EQUAL, i - 1, j - 1, baselineLines.get(i - 1), currentLines.get(j - 1)));
-        } else if (lcs[i - 1][j] >= lcs[i][j - 1]) {
-            result.addAll(backtrackLCS(lcs, baselineLines, currentLines, i - 1, j));
-        } else {
-            result.addAll(backtrackLCS(lcs, baselineLines, currentLines, i, j - 1));
+        // 处理剩余的基线行（都是删除）
+        while (i > 0) {
+            result.add(new DiffLine(DiffType.DELETE, i - 1, -1, baselineLines.get(i - 1), ""));
+            i--;
+        }
+        
+        // 处理剩余的当前行（都是新增）
+        while (j > 0) {
+            result.add(new DiffLine(DiffType.ADD, -1, j - 1, "", currentLines.get(j - 1)));
+            j--;
         }
         
         return result;
     }
 
-        /**
-     * 生成差异项
+    /**
+     * 生成完整的对齐行信息（供前端使用）
      */
-    private void generateDiffItems(List<DiffLine> diffLines, List<String> baselineLines, 
-                                  List<String> currentLines, CompareResultModel result) {
+    private void generateAlignedLines(List<DiffLine> diffLines, CompareResultModel result) {
+        List<AlignedLine> alignedLines = new ArrayList<>();
         
+        int baselineLineNumber = 1;
+        int currentLineNumber = 1;
+        
+        for (DiffLine diffLine : diffLines) {
+            AlignedLine alignedLine = new AlignedLine();
+            
+            switch (diffLine.type) {
+                case EQUAL:
+                case MODIFY:
+                    // 两边都有内容
+                    alignedLine.setBaselineLineNumber(baselineLineNumber++);
+                    alignedLine.setCurrentLineNumber(currentLineNumber++);
+                    alignedLine.setBaselineContent(diffLine.baselineValue);
+                    alignedLine.setCurrentContent(diffLine.currentValue);
+                    alignedLine.setDiffType(diffLine.type.name());
+                    break;
+                    
+                case DELETE:
+                    // 基线有，当前没有
+                    alignedLine.setBaselineLineNumber(baselineLineNumber++);
+                    alignedLine.setCurrentLineNumber(-1); // -1表示空行
+                    alignedLine.setBaselineContent(diffLine.baselineValue);
+                    alignedLine.setCurrentContent("");
+                    alignedLine.setDiffType("DELETE");
+                    break;
+                    
+                case ADD:
+                    // 基线没有，当前有
+                    alignedLine.setBaselineLineNumber(-1); // -1表示空行
+                    alignedLine.setCurrentLineNumber(currentLineNumber++);
+                    alignedLine.setBaselineContent("");
+                    alignedLine.setCurrentContent(diffLine.currentValue);
+                    alignedLine.setDiffType("ADD");
+                    break;
+            }
+            
+            alignedLines.add(alignedLine);
+        }
+        
+        result.setAlignedLines(alignedLines);
+        log.info("生成完整对齐行信息: {} 行", alignedLines.size());
+    }
+
+        /**
+     * 生成差异项（增强版 - 支持行内差异检测）
+     */
+    private void generateDiffItems(List<DiffLine> diffLines, List<String> baselineLines,
+                                  List<String> currentLines, CompareResultModel result) {
+
+        // 检查是否为XML文件
+        boolean isXmlFile = isXmlContent(baselineLines) || isXmlContent(currentLines);
+        
+        int baselineLineCounter = 1;
+        int currentLineCounter = 1;
+
         for (DiffLine diffLine : diffLines) {
             switch (diffLine.type) {
                 case ADD:
                     // 基线没有，当前有 - 新增
-                    DiffItem addItem = DiffItem.createAdd("第" + (diffLine.currentIndex + 1) + "行", diffLine.currentValue);
+                    String addKey = "新增第" + currentLineCounter + "行";
+                    DiffItem addItem = DiffItem.createAdd(addKey, diffLine.currentValue);
                     addItem.setDiffLevel(getDiffLevel(diffLine.currentValue));
                     addItem.setDiffCategory("配置新增");
                     addItem.setSuggestAction("确认新增配置是否正确");
-                    addItem.setDiffPath("line_" + (diffLine.currentIndex + 1));
+                    addItem.setDiffPath("line_" + currentLineCounter);
+                    addItem.setBaselineValue("");
+                    addItem.setCurrentValue(diffLine.currentValue);
+                    
+                    // 设置行号信息
+                    // addItem.setLineNumbers(null, currentLineCounter);
+                    
+                    // 添加行内差异分析
+                    // InlineDiffResult inlineDiff = analyzeInlineDiffs("", diffLine.currentValue);
+                    // addItem.setInlineDiff(inlineDiff);
+
                     result.addDiffItem(addItem);
+                    currentLineCounter++;
                     break;
-                    
+
                 case DELETE:
-                    // 基线有，当前没有 - 缺失
-                    DiffItem deleteItem = DiffItem.createDelete("第" + (diffLine.baselineIndex + 1) + "行", diffLine.baselineValue);
+                    // 基线有，当前没有 - 配置删除
+                    String deleteKey = "删除第" + baselineLineCounter + "行";
+                    DiffItem deleteItem = DiffItem.createDelete(deleteKey, diffLine.baselineValue);
                     deleteItem.setDiffLevel(getDiffLevel(diffLine.baselineValue));
-                    deleteItem.setDiffCategory("配置缺失");
-                    deleteItem.setSuggestAction("确认是否需要保留该配置");
-                    deleteItem.setDiffPath("line_" + (diffLine.baselineIndex + 1));
-                    result.addDiffItem(deleteItem);
-                    break;
+                    deleteItem.setDiffCategory("配置删除");
+                    deleteItem.setSuggestAction("确认删除配置是否正确");
+                    deleteItem.setDiffPath("line_" + baselineLineCounter);
+                    deleteItem.setBaselineValue(diffLine.baselineValue);
+                    deleteItem.setCurrentValue("");
                     
+                    // 设置行号信息
+                    // deleteItem.setLineNumbers(baselineLineCounter, null);
+                    
+                    // 添加行内差异分析
+                    // InlineDiffResult inlineDiff2 = analyzeInlineDiffs(diffLine.baselineValue, "");
+                    // deleteItem.setInlineDiff(inlineDiff2);
+
+                    result.addDiffItem(deleteItem);
+                    baselineLineCounter++;
+                    break;
+
                 case MODIFY:
                     // 两行都有但内容不同 - 修改
-                    DiffItem modifyItem = DiffItem.createModify("第" + (diffLine.baselineIndex + 1) + "行", diffLine.baselineValue, diffLine.currentValue);
+                    String modifyKey = "修改第" + baselineLineCounter + "行";
+                    DiffItem modifyItem = DiffItem.createModify(modifyKey, diffLine.baselineValue, diffLine.currentValue);
                     modifyItem.setDiffLevel(getDiffLevel(diffLine.baselineValue));
                     modifyItem.setDiffCategory("配置修改");
                     modifyItem.setSuggestAction("确认配置修改是否正确");
-                    modifyItem.setDiffPath("line_" + (diffLine.baselineIndex + 1));
-                    result.addDiffItem(modifyItem);
-                    break;
+                    modifyItem.setDiffPath("line_" + baselineLineCounter);
+                    modifyItem.setBaselineValue(diffLine.baselineValue);
+                    modifyItem.setCurrentValue(diffLine.currentValue);
                     
+                    // 设置行号信息
+                    // modifyItem.setLineNumbers(baselineLineCounter, currentLineCounter);
+                    
+                    // 添加行内差异分析
+                    // InlineDiffResult inlineDiff3 = analyzeInlineDiffs(diffLine.baselineValue, diffLine.currentValue);
+                    // modifyItem.setInlineDiff(inlineDiff3);
+
+                    result.addDiffItem(modifyItem);
+                    baselineLineCounter++;
+                    currentLineCounter++;
+                    break;
+
                 case EQUAL:
-                    // 相同的行，不添加差异项
+                    // 相同的行，不添加差异项，但需要更新行号
+                    baselineLineCounter++;
+                    currentLineCounter++;
                     break;
             }
         }
@@ -386,8 +769,24 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
         if (!StringUtils.hasText(content)) {
             return new ArrayList<>();
         }
-        
-        return Arrays.asList(content.split("\r?\n"));
+
+        String[] rawLines = content.split("\\r?\\n", -1);
+        List<String> lines = new ArrayList<>(rawLines.length);
+        for (String rawLine : rawLines) {
+            if (rawLine == null) {
+                lines.add("");
+            } else if (rawLine.endsWith("\r")) {
+                lines.add(rawLine.substring(0, rawLine.length() - 1));
+            } else {
+                lines.add(rawLine);
+            }
+        }
+
+        // 去掉结尾多余的空行，避免仅因额外换行出现差异
+        while (!lines.isEmpty() && !StringUtils.hasText(lines.get(lines.size() - 1))) {
+            lines.remove(lines.size() - 1);
+        }
+        return lines;
     }
 
     /**
@@ -477,6 +876,7 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
     /**
      * 获取字符串列表类型的规则值
      */
+    @SuppressWarnings("unchecked")
     private List<String> getStringListRule(Map<String, Object> rules, String key, List<String> defaultValue) {
         if (rules == null || !rules.containsKey(key)) {
             return defaultValue;
@@ -497,6 +897,335 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
             }
         }
         return defaultValue;
+    }
+
+    /**
+     * 行内差异分析 - 检测一行内的具体差异
+     */
+    private InlineDiffResult analyzeInlineDiffs(String baselineLine, String currentLine) {
+        if (baselineLine == null && currentLine == null) {
+            return new InlineDiffResult("", "", java.util.Collections.emptyList());
+        }
+
+        if (baselineLine == null) {
+            baselineLine = "";
+        }
+        if (currentLine == null) {
+            currentLine = "";
+        }
+
+        // 使用Myers算法进行字符级差异分析
+        InlineDiffResult inlineDiff = computeInlineDiff(baselineLine, currentLine);
+
+        log.debug("行内差异分析完成：基线='{}'，当前='{}'，差异段数={}",
+                 baselineLine, currentLine, inlineDiff.getDiffSegments().size());
+        
+        return inlineDiff;
+    }
+
+    /**
+     * 计算行内差异（优化版）
+     */
+    private InlineDiffResult computeInlineDiff(String baseline, String current) {
+        List<InlineDiffSegment> segments = new ArrayList<>();
+
+        if (baseline.equals(current)) {
+            // 完全相同，返回一个相等段
+            segments.add(new InlineDiffSegment(InlineDiffType.EQUAL, baseline, current, 0, baseline.length(), 0, current.length()));
+            return new InlineDiffResult(baseline, current, segments);
+        }
+
+        // 使用改进的Myers算法计算字符级差异
+        List<CharDiffOp> diffOps = computeCharacterLevelDiff(baseline, current);
+        
+        // 将diff操作转换为段
+        convertDiffOpsToSegments(diffOps, baseline, current, segments);
+        
+        // 合并相邻的相同类型段
+        segments = mergeAdjacentSegments(segments);
+
+        return new InlineDiffResult(baseline, current, segments);
+    }
+    
+    /**
+     * 计算字符级差异操作
+     */
+    private List<CharDiffOp> computeCharacterLevelDiff(String baseline, String current) {
+        int m = baseline.length();
+        int n = current.length();
+        
+        // 使用动态规划计算LCS
+        int[][] dp = new int[m + 1][n + 1];
+        
+        for (int i = 1; i <= m; i++) {
+            for (int j = 1; j <= n; j++) {
+                if (baseline.charAt(i - 1) == current.charAt(j - 1)) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+        }
+        
+        // 回溯构建差异操作序列
+        List<CharDiffOp> ops = new ArrayList<>();
+        int i = m, j = n;
+        
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0 && baseline.charAt(i - 1) == current.charAt(j - 1)) {
+                ops.add(0, new CharDiffOp(CharDiffOpType.EQUAL, i - 1, j - 1, baseline.charAt(i - 1)));
+                i--;
+                j--;
+            } else if (i > 0 && (j == 0 || dp[i - 1][j] >= dp[i][j - 1])) {
+                ops.add(0, new CharDiffOp(CharDiffOpType.DELETE, i - 1, -1, baseline.charAt(i - 1)));
+                i--;
+            } else {
+                ops.add(0, new CharDiffOp(CharDiffOpType.INSERT, -1, j - 1, current.charAt(j - 1)));
+                j--;
+            }
+        }
+        
+        return ops;
+    }
+    
+    /**
+     * 将diff操作转换为段
+     */
+    private void convertDiffOpsToSegments(List<CharDiffOp> diffOps, String baseline, String current, List<InlineDiffSegment> segments) {
+        StringBuilder baselineText = new StringBuilder();
+        StringBuilder currentText = new StringBuilder();
+        CharDiffOpType currentType = null;
+        int baselineStart = 0, currentStart = 0;
+        
+        for (CharDiffOp op : diffOps) {
+            if (currentType != null && currentType != op.type) {
+                // 类型变化，保存当前段
+                addSegment(segments, currentType, baselineText.toString(), currentText.toString(), 
+                          baselineStart, baselineStart + baselineText.length(),
+                          currentStart, currentStart + currentText.length());
+                
+                // 重置状态
+                baselineStart += baselineText.length();
+                currentStart += currentText.length();
+                baselineText.setLength(0);
+                currentText.setLength(0);
+            }
+            
+            currentType = op.type;
+            
+            switch (op.type) {
+                case EQUAL:
+                    baselineText.append(op.character);
+                    currentText.append(op.character);
+                    break;
+                case DELETE:
+                    baselineText.append(op.character);
+                    break;
+                case INSERT:
+                    currentText.append(op.character);
+                    break;
+            }
+        }
+        
+        // 添加最后一个段
+        if (currentType != null) {
+            addSegment(segments, currentType, baselineText.toString(), currentText.toString(),
+                      baselineStart, baselineStart + baselineText.length(),
+                      currentStart, currentStart + currentText.length());
+        }
+    }
+    
+    /**
+     * 添加段
+     */
+    private void addSegment(List<InlineDiffSegment> segments, CharDiffOpType type, 
+                           String baselineText, String currentText,
+                           int baselineStart, int baselineEnd, int currentStart, int currentEnd) {
+        InlineDiffType segmentType;
+        switch (type) {
+            case EQUAL:
+                segmentType = InlineDiffType.EQUAL;
+                break;
+            case DELETE:
+                segmentType = InlineDiffType.DELETE;
+                break;
+            case INSERT:
+                segmentType = InlineDiffType.ADD;
+                break;
+            default:
+                return;
+        }
+        
+        segments.add(new InlineDiffSegment(segmentType, baselineText, currentText,
+                                          baselineStart, baselineEnd, currentStart, currentEnd));
+    }
+    
+    /**
+     * 合并相邻的相同类型段
+     */
+    private List<InlineDiffSegment> mergeAdjacentSegments(List<InlineDiffSegment> segments) {
+        if (segments.isEmpty()) {
+            return segments;
+        }
+        
+        List<InlineDiffSegment> merged = new ArrayList<>();
+        InlineDiffSegment current = segments.get(0);
+        
+        for (int i = 1; i < segments.size(); i++) {
+            InlineDiffSegment next = segments.get(i);
+            
+            if (current.getType() == next.getType()) {
+                // 相同类型，合并
+                current = new InlineDiffSegment(
+                    current.getType(),
+                    current.getBaselineText() + next.getBaselineText(),
+                    current.getCurrentText() + next.getCurrentText(),
+                    current.getBaselineStart(),
+                    next.getBaselineEnd(),
+                    current.getCurrentStart(),
+                    next.getCurrentEnd()
+                );
+            } else {
+                // 不同类型，保存当前段
+                merged.add(current);
+                current = next;
+            }
+        }
+        
+        merged.add(current);
+        return merged;
+    }
+
+    /**
+     * 计算字符级LCS矩阵
+     */
+    private int[][] computeCharLCS(String baseline, String current) {
+        int m = baseline.length();
+        int n = current.length();
+        int[][] lcs = new int[m + 1][n + 1];
+
+        for (int i = 0; i <= m; i++) {
+            for (int j = 0; j <= n; j++) {
+                if (i == 0 || j == 0) {
+                    lcs[i][j] = 0;
+                } else if (baseline.charAt(i - 1) == current.charAt(j - 1)) {
+                    lcs[i][j] = lcs[i - 1][j - 1] + 1;
+                } else {
+                    lcs[i][j] = Math.max(lcs[i - 1][j], lcs[i][j - 1]);
+                }
+            }
+        }
+
+        return lcs;
+    }
+
+    /**
+     * 回溯字符级差异
+     */
+    private void backtrackCharDiff(int[][] lcs, String baseline, String current, int i, int j, List<InlineDiffSegment> segments) {
+        if (i == 0 || j == 0) {
+            return;
+        }
+
+        if (baseline.charAt(i - 1) == current.charAt(j - 1)) {
+            // 相同字符，继续回溯
+            backtrackCharDiff(lcs, baseline, current, i - 1, j - 1, segments);
+        } else if (lcs[i - 1][j] >= lcs[i][j - 1]) {
+            // 基线中有额外字符
+            backtrackCharDiff(lcs, baseline, current, i - 1, j, segments);
+            segments.add(new InlineDiffSegment(InlineDiffType.DELETE,
+                                             String.valueOf(baseline.charAt(i - 1)), "",
+                                             i - 1, i, j, j));
+        } else {
+            // 当前行中有额外字符
+            backtrackCharDiff(lcs, baseline, current, i, j - 1, segments);
+            segments.add(new InlineDiffSegment(InlineDiffType.ADD,
+                                             "", String.valueOf(current.charAt(j - 1)),
+                                             i, i, j - 1, j));
+        }
+    }
+
+    /**
+     * 行内差异结果类
+     */
+    private static class InlineDiffResult {
+        private final String baseline;
+        private final String current;
+        private final List<InlineDiffSegment> diffSegments;
+
+        public InlineDiffResult(String baseline, String current, List<InlineDiffSegment> diffSegments) {
+            this.baseline = baseline;
+            this.current = current;
+            this.diffSegments = diffSegments;
+        }
+
+        public String getBaseline() { return baseline; }
+        public String getCurrent() { return current; }
+        public List<InlineDiffSegment> getDiffSegments() { return diffSegments; }
+    }
+
+    /**
+     * 行内差异段类
+     */
+    private static class InlineDiffSegment {
+        private final InlineDiffType type;
+        private final String baselineText;
+        private final String currentText;
+        private final int baselineStart;
+        private final int baselineEnd;
+        private final int currentStart;
+        private final int currentEnd;
+
+        public InlineDiffSegment(InlineDiffType type, String baselineText, String currentText,
+                               int baselineStart, int baselineEnd, int currentStart, int currentEnd) {
+            this.type = type;
+            this.baselineText = baselineText;
+            this.currentText = currentText;
+            this.baselineStart = baselineStart;
+            this.baselineEnd = baselineEnd;
+            this.currentStart = currentStart;
+            this.currentEnd = currentEnd;
+        }
+
+        // Getters
+        public InlineDiffType getType() { return type; }
+        public String getBaselineText() { return baselineText; }
+        public String getCurrentText() { return currentText; }
+        public int getBaselineStart() { return baselineStart; }
+        public int getBaselineEnd() { return baselineEnd; }
+        public int getCurrentStart() { return currentStart; }
+        public int getCurrentEnd() { return currentEnd; }
+    }
+
+    /**
+     * 行内差异类型枚举
+     */
+    private enum InlineDiffType {
+        ADD, DELETE, EQUAL
+    }
+    
+    /**
+     * 字符差异操作类型
+     */
+    private enum CharDiffOpType {
+        EQUAL, DELETE, INSERT
+    }
+    
+    /**
+     * 字符差异操作
+     */
+    private static class CharDiffOp {
+        final CharDiffOpType type;
+        final int baselineIndex;
+        final int currentIndex;
+        final char character;
+        
+        CharDiffOp(CharDiffOpType type, int baselineIndex, int currentIndex, char character) {
+            this.type = type;
+            this.baselineIndex = baselineIndex;
+            this.currentIndex = currentIndex;
+            this.character = character;
+        }
     }
 
     /**
@@ -522,6 +1251,42 @@ public class TextCompareAlgorithm implements CompareAlgorithm {
             this.currentIndex = currentIndex;
             this.baselineValue = baselineValue;
             this.currentValue = currentValue;
+        }
+    }
+    
+    /**
+     * 检测是否为JSON内容
+     */
+    private boolean isJsonContent(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return false;
+        }
+        
+        String trimmed = content.trim();
+        return (trimmed.startsWith("{") && trimmed.endsWith("}")) || 
+               (trimmed.startsWith("[") && trimmed.endsWith("]"));
+    }
+    
+    /**
+     * 规范化JSON格式
+     * 统一缩进、冒号后空格等格式问题
+     */
+    private String normalizeJsonFormat(String jsonContent) {
+        if (jsonContent == null || jsonContent.trim().isEmpty()) {
+            return jsonContent;
+        }
+        
+        try {
+            // 使用Jackson进行格式化，统一格式
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Object jsonObject = mapper.readValue(jsonContent, Object.class);
+            
+            // 使用统一的格式输出：2空格缩进，冒号后无空格
+            return mapper.writerWithDefaultPrettyPrinter()
+                        .writeValueAsString(jsonObject);
+        } catch (Exception e) {
+            log.warn("JSON格式规范化失败，使用原始内容: {}", e.getMessage());
+            return jsonContent;
         }
     }
 }

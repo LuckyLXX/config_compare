@@ -33,12 +33,6 @@ const routes = [
         name: 'ServerManage',
         component: () => import('@/views/system/servers/index.vue'),
         meta: { title: '服务器管理', icon: 'Cpu' }
-      },
-      {
-        path: 'schedule',
-        name: 'TaskSchedule',
-        component: () => import('@/views/report/schedule/index.vue'),
-        meta: { title: '任务调度', icon: 'Timer' }
       }
     ]
   },
@@ -136,17 +130,47 @@ const routes = [
         component: () => import('@/views/report/compare-report/index.vue'),
         meta: { title: '比对报告', icon: 'Document' }
       },
+    ]
+  },
+  {
+    path: '/data-process',
+    component: Layout,
+    redirect: '/data-process/list',
+    name: 'DataProcess',
+    meta: { title: '数据处理中心', icon: 'MagicStick' },
+    children: [
       {
-        path: 'statistics',
-        name: 'TaskStatistics',
-        component: () => import('@/views/report/statistics/index.vue'),
-        meta: { title: '执行统计', icon: 'PieChart' }
+        path: 'list',
+        name: 'DataProcessList',
+        component: () => import('@/views/data-process/list/index.vue'),
+        meta: { title: '任务列表', icon: 'List' }
       },
       {
-        path: 'health',
-        name: 'SystemHealth',
-        component: () => import('@/views/report/system-health/index.vue'),
-        meta: { title: '系统监控', icon: 'Monitor' }
+        path: 'workbench',
+        name: 'DataProcessWorkbench',
+        component: () => import('@/views/data-process/workbench/index.vue'),
+        meta: { title: '处理工作台', icon: 'Cpu', hidden: true }
+      }
+    ]
+  },
+  {
+    path: '/external-link',
+    component: Layout,
+    redirect: '/external-link/manage',
+    name: 'ExternalLink',
+    meta: { title: '外部链接', icon: 'Link' },
+    children: [
+      {
+        path: 'manage',
+        name: 'ExternalLinkManage',
+        component: () => import('@/views/external-link/manage/index.vue'),
+        meta: { title: '链接管理', icon: 'Setting' }
+      },
+      {
+        path: 'view/:id',
+        name: 'ExternalLinkView',
+        component: () => import('@/views/external-link/iframe/index.vue'),
+        meta: { title: '外部页面', icon: 'Monitor', hidden: true }
       }
     ]
   }

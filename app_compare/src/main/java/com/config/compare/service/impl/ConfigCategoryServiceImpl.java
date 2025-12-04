@@ -4,16 +4,18 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.config.compare.common.request.PageRequest;
+import com.config.compare.common.request.CategoryPageRequest;
+import com.config.compare.entity.ConfigBaseline;
 import com.config.compare.entity.ConfigCategory;
+import com.config.compare.mapper.ConfigBaselineMapper;
 import com.config.compare.mapper.ConfigCategoryMapper;
 import com.config.compare.service.ConfigCategoryService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 配置分类Service实现类
@@ -24,15 +26,33 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ConfigCategoryServiceImpl extends ServiceImpl<ConfigCategoryMapper, ConfigCategory> implements ConfigCategoryService {
 
+    private final ConfigBaselineMapper configBaselineMapper;
+
     @Override
-    public IPage<ConfigCategory> pageQuery(PageRequest pageRequest) {
+    public IPage<ConfigCategory> pageQuery(CategoryPageRequest pageRequest) {
         Page<ConfigCategory> page = new Page<>(pageRequest.getCurrent(), pageRequest.getSize());
         
         LambdaQueryWrapper<ConfigCategory> queryWrapper = new LambdaQueryWrapper<>();
         
-        // 关键词搜索
+        // 【新增】分类名称筛选
+        if (StringUtils.hasText(pageRequest.getCategoryName())) {
+            queryWrapper.like(ConfigCategory::getCategoryName, pageRequest.getCategoryName());
+        }
+        
+        // 【新增】分类编码筛选
+        if (StringUtils.hasText(pageRequest.getCategoryCode())) {
+            queryWrapper.like(ConfigCategory::getCategoryCode, pageRequest.getCategoryCode());
+        }
+        
+        // 【新增】状态筛选
+        if (pageRequest.getStatus() != null) {
+            queryWrapper.eq(ConfigCategory::getStatus, pageRequest.getStatus());
+        }
+        
+        // 关键词搜索（保留原有功能，可同时使用）
         if (StringUtils.hasText(pageRequest.getKeyword())) {
             queryWrapper.and(wrapper -> wrapper
                 .like(ConfigCategory::getCategoryName, pageRequest.getKeyword())
@@ -101,8 +121,8 @@ public class ConfigCategoryServiceImpl extends ServiceImpl<ConfigCategoryMapper,
 
     @Override
     public List<ConfigCategory> getCategoryTree() {
-        List<ConfigCategory> allCategories = baseMapper.selectEnabledCategories();
-        return buildCategoryTree(allCategories, 0L);
+        // 不再支持树形结构，直接返回平铺的分类列表
+        return baseMapper.selectEnabledCategories();
     }
 
     @Override
@@ -149,10 +169,9 @@ public class ConfigCategoryServiceImpl extends ServiceImpl<ConfigCategoryMapper,
             throw new RuntimeException("分类编码已存在");
         }
         
-        // 设置默认值
-        if (configCategory.getParentId() == null) {
-            configCategory.setParentId(0L);
-        }
+        // 设置默认值 - 所有分类都是顶级分类，不支持子分类
+        configCategory.setParentId(0L);
+        
         if (configCategory.getStatus() == null) {
             configCategory.setStatus(1);
         }
@@ -170,10 +189,8 @@ public class ConfigCategoryServiceImpl extends ServiceImpl<ConfigCategoryMapper,
             throw new RuntimeException("分类编码已存在");
         }
         
-        // 防止将自己设置为父分类
-        if (configCategory.getParentId() != null && configCategory.getParentId().equals(configCategory.getId())) {
-            throw new RuntimeException("不能将自己设置为父分类");
-        }
+        // 强制设置为顶级分类 - 不支持子分类功能
+        configCategory.setParentId(0L);
         
         return this.updateById(configCategory);
     }
@@ -210,28 +227,16 @@ public class ConfigCategoryServiceImpl extends ServiceImpl<ConfigCategoryMapper,
 
     @Override
     public boolean isUsedByBaseline(Long id) {
-        // TODO: 这里需要检查config_baseline表中是否有使用该分类的基线
-        // 暂时返回false，等ConfigBaseline相关功能完成后再实现
-        return false;
+        // 检查config_baseline表中是否有使用该分类的基线
+        LambdaQueryWrapper<ConfigBaseline> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ConfigBaseline::getCategoryId, id);
+        Long count = configBaselineMapper.selectCount(queryWrapper);
+        
+        if (count > 0) {
+            log.warn("分类ID: {} 被 {} 个基线使用，无法删除", id, count);
+        }
+        
+        return count > 0;
     }
 
-    /**
-     * 构建分类树
-     * 
-     * @param categories 所有分类
-     * @param parentId 父分类ID
-     * @return 分类树
-     */
-    private List<ConfigCategory> buildCategoryTree(List<ConfigCategory> categories, Long parentId) {
-        return categories.stream()
-            .filter(category -> {
-                Long categoryParentId = category.getParentId() == null ? 0L : category.getParentId();
-                return categoryParentId.equals(parentId);
-            })
-            .peek(category -> {
-                List<ConfigCategory> children = buildCategoryTree(categories, category.getId());
-                // 这里可以设置children字段，如果ConfigCategory实体中有children字段的话
-            })
-            .collect(Collectors.toList());
-    }
 }

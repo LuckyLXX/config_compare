@@ -3,6 +3,10 @@
     <div class="page-header">
       <h2 class="page-title">基线版本管理</h2>
       <div class="page-actions">
+        <el-button @click="handleRefresh" :loading="loading">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
         <el-button type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新增基线
@@ -14,55 +18,93 @@
       </div>
     </div>
 
-    <!-- 基线树形结构 -->
-    <div class="app-card">
-      <div class="tree-header">
-        <h3>基线分层管理</h3>
-        <el-input
-          v-model="filterText"
-          placeholder="搜索基线..."
-          style="width: 200px"
-          clearable
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-      </div>
-      
-      <el-tree
-        ref="treeRef"
-        :data="treeData"
-        :props="treeProps"
-        :filter-node-method="filterNode"
-        show-checkbox
-        node-key="id"
-        default-expand-all
-        @node-click="handleNodeClick"
-      >
-        <template #default="{ node, data }">
-          <div class="tree-node">
-            <span class="node-label">{{ node.label }}</span>
-            <span class="node-extra">
-              <el-tag v-if="data.type === 'baseline'" :type="data.isDefault ? 'success' : 'info'" size="small">
-                {{ data.isDefault ? '默认' : data.status === 1 ? '生效' : '草稿' }}
-              </el-tag>
-              <span v-if="data.type === 'baseline'" class="node-version">{{ data.version }}</span>
-            </span>
-          </div>
-        </template>
-      </el-tree>
-    </div>
-
     <!-- 基线列表 -->
     <div class="app-card">
+      <!-- 筛选条件 -->
+      <div class="filter-section">
+        <el-form :inline="true" :model="filterForm" class="filter-form">
+          <el-form-item label="系统">
+            <el-select
+              v-model="filterForm.systemId"
+              placeholder="请选择系统"
+              clearable
+              style="width: 200px"
+              @change="handleFilterChange"
+            >
+              <el-option
+                v-for="system in systemList"
+                :key="system.id"
+                :label="system.systemName"
+                :value="system.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="服务器类型">
+            <el-select
+              v-model="filterForm.serverTypeId"
+              placeholder="请选择服务器类型"
+              clearable
+              style="width: 180px"
+              @change="handleFilterChange"
+            >
+              <el-option
+                v-for="type in serverTypeList"
+                :key="type.id"
+                :label="type.typeName"
+                :value="type.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="配置分类">
+            <el-select
+              v-model="filterForm.categoryId"
+              placeholder="请选择配置分类"
+              clearable
+              style="width: 180px"
+              @change="handleFilterChange"
+            >
+              <el-option
+                v-for="category in categoryList"
+                :key="category.id"
+                :label="category.categoryName"
+                :value="category.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="基线名称">
+            <el-input
+              v-model="filterForm.baselineName"
+              placeholder="搜索基线名称..."
+              clearable
+              style="width: 200px"
+              @change="handleFilterChange"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">
+              <el-icon><Search /></el-icon>
+              查询
+            </el-button>
+            <el-button @click="handleResetFilter">
+              <el-icon><RefreshLeft /></el-icon>
+              重置
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
       <div class="list-header">
-        <h3>基线详情 <span v-if="selectedNode">- {{ selectedNode.label }}</span></h3>
+        <h3>基线列表</h3>
         <div class="list-actions">
           <el-button v-if="selectedBaseline" type="warning" size="small" @click="handleSetDefault">
             设为默认
           </el-button>
           <el-button v-if="selectedBaseline" type="info" size="small" @click="handleVersionHistory">
+            <el-icon><Clock /></el-icon>
             版本历史
           </el-button>
         </div>
@@ -181,6 +223,16 @@
       </template>
     </el-dialog>
 
+    <!-- 版本历史对话框 -->
+    <VersionHistoryDialog
+      v-model="versionHistoryVisible"
+      :system-id="selectedBaseline?.systemId"
+      :server-type-id="selectedBaseline?.serverTypeId"
+      :category-id="selectedBaseline?.categoryId"
+      :baseline-name="selectedBaseline?.baselineName"
+      @version-switched="handleVersionSwitched"
+    />
+
     <!-- 新增/编辑基线对话框 -->
     <el-dialog
       v-model="editDialogVisible"
@@ -196,17 +248,20 @@
         class="app-form"
       >
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="24">
             <el-form-item label="基线名称" prop="baselineName">
               <el-input v-model="form.baselineName" placeholder="请输入基线名称" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="版本号" prop="baselineVersion">
-              <el-input v-model="form.baselineVersion" placeholder="请输入版本号" />
-            </el-form-item>
-          </el-col>
         </el-row>
+        
+        <el-alert
+          v-if="!isEdit"
+          title="提示：版本号将自动生成（格式：V + 时间戳）"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 20px"
+        />
         
         <el-row :gutter="20">
           <el-col :span="8">
@@ -300,25 +355,35 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onActivated, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { baselineApi, categoryApi } from '@/api/baseline'
 import { systemApi, serverTypeApi } from '@/api/system'
+import VersionHistoryDialog from '@/components/baseline/VersionHistoryDialog.vue'
 
 export default {
   name: 'BaselineManage',
+  components: {
+    VersionHistoryDialog
+  },
   setup() {
     const loading = ref(false)
     const submitLoading = ref(false)
     const viewDialogVisible = ref(false)
     const editDialogVisible = ref(false)
+    const versionHistoryVisible = ref(false)
     const isEdit = ref(false)
     const formRef = ref()
     const treeRef = ref()
     const uploadRef = ref()
 
-    // 搜索过滤
-    const filterText = ref('')
+    // 筛选条件
+    const filterForm = reactive({
+      systemId: null,
+      serverTypeId: null,
+      categoryId: null,
+      baselineName: ''
+    })
 
     // 分页信息
     const pagination = reactive({
@@ -332,16 +397,8 @@ export default {
     const serverTypeList = ref([])
     const categoryList = ref([])
     const baselineList = ref([])
-    const selectedNode = ref(null)
     const selectedBaseline = ref(null)
     const currentBaseline = ref({})
-
-    // 树形数据
-    const treeData = ref([])
-    const treeProps = {
-      children: 'children',
-      label: 'label'
-    }
 
     // 表单数据
     const form = reactive({
@@ -350,7 +407,6 @@ export default {
       serverTypeId: '',
       categoryId: '',
       baselineName: '',
-      baselineVersion: '',
       fileName: '',
       configContent: '',
       description: ''
@@ -360,9 +416,6 @@ export default {
     const rules = {
       baselineName: [
         { required: true, message: '请输入基线名称', trigger: 'blur' }
-      ],
-      baselineVersion: [
-        { required: true, message: '请输入版本号', trigger: 'blur' }
       ],
       systemId: [
         { required: true, message: '请选择系统', trigger: 'change' }
@@ -376,89 +429,6 @@ export default {
       configContent: [
         { required: true, message: '请输入配置内容', trigger: 'blur' }
       ]
-    }
-
-    // 构建树形数据
-    const buildTreeData = () => {
-      const tree = []
-      
-      // 遍历系统列表
-      systemList.value.forEach(system => {
-        const systemNode = {
-          id: `system_${system.id}`,
-          label: system.systemName,
-          type: 'system',
-          systemId: system.id,
-          children: []
-        }
-        
-        // 遍历服务器类型
-        serverTypeList.value.forEach(serverType => {
-          const serverTypeNode = {
-            id: `type_${system.id}_${serverType.id}`,
-            label: serverType.typeName,
-            type: 'serverType',
-            systemId: system.id,
-            serverTypeId: serverType.id,
-            children: []
-          }
-          
-          // 遍历配置分类
-          categoryList.value.forEach(category => {
-            const categoryNode = {
-              id: `category_${system.id}_${serverType.id}_${category.id}`,
-              label: category.categoryName,
-              type: 'category',
-              systemId: system.id,
-              serverTypeId: serverType.id,
-              categoryId: category.id,
-              children: []
-            }
-            
-            // 查找该分组下的基线
-            const groupBaselines = baselineList.value.filter(baseline => 
-              baseline.systemId === system.id && 
-              baseline.serverTypeId === serverType.id && 
-              baseline.categoryId === category.id
-            )
-            
-            // 添加基线节点
-            groupBaselines.forEach(baseline => {
-              categoryNode.children.push({
-                id: `baseline_${baseline.id}`,
-                label: baseline.baselineName,
-                type: 'baseline',
-                baselineId: baseline.id,
-                systemId: baseline.systemId,
-                serverTypeId: baseline.serverTypeId,
-                categoryId: baseline.categoryId,
-                version: baseline.baselineVersion,
-                isDefault: baseline.isDefault === 1,
-                status: baseline.status,
-                createTime: baseline.createTime,
-                description: baseline.description
-              })
-            })
-            
-            // 只有当分类下有基线时才添加分类节点
-            if (categoryNode.children.length > 0) {
-              serverTypeNode.children.push(categoryNode)
-            }
-          })
-          
-          // 只有当服务器类型下有分类时才添加服务器类型节点
-          if (serverTypeNode.children.length > 0) {
-            systemNode.children.push(serverTypeNode)
-          }
-        })
-        
-        // 只有当系统下有服务器类型时才添加系统节点
-        if (systemNode.children.length > 0) {
-          tree.push(systemNode)
-        }
-      })
-      
-      treeData.value = tree
     }
 
     // 获取基础数据
@@ -497,18 +467,57 @@ export default {
       loading.value = true
       try {
         const params = {
-          current: 1,
-          size: 1000
+          current: pagination.current,
+          size: pagination.size
         }
+        
+        // 添加筛选条件
+        if (filterForm.systemId) {
+          params.systemId = filterForm.systemId
+        }
+        if (filterForm.serverTypeId) {
+          params.serverTypeId = filterForm.serverTypeId
+        }
+        if (filterForm.categoryId) {
+          params.categoryId = filterForm.categoryId
+        }
+        if (filterForm.baselineName) {
+          params.baselineName = filterForm.baselineName
+        }
+        
         const response = await baselineApi.getBaselineList(params)
-        baselineList.value = response.data?.records || []
-        pagination.total = response.data?.total || 0
+        // 过滤掉归档状态（status=2）的基线，只显示有效基线
+        const allBaselines = response.data?.records || []
+        baselineList.value = allBaselines.filter(baseline => baseline.status !== 2)
+        pagination.total = response.data?.total || baselineList.value.length
       } catch (error) {
         console.error('获取基线列表失败:', error)
         ElMessage.error('获取基线列表失败')
       } finally {
         loading.value = false
       }
+    }
+    
+    // 筛选条件变化
+    const handleFilterChange = () => {
+      pagination.current = 1
+      fetchBaselineList()
+    }
+
+    // 查询
+    const handleSearch = () => {
+      pagination.current = 1
+      fetchBaselineList()
+    }
+
+    // 重置筛选条件
+    const handleResetFilter = () => {
+      filterForm.systemId = null
+      filterForm.serverTypeId = null
+      filterForm.categoryId = null
+      filterForm.baselineName = ''
+      pagination.current = 1
+      fetchBaselineList()
     }
 
     // 状态文本映射
@@ -521,22 +530,6 @@ export default {
       return statusMap[status] || '未知'
     }
 
-    // 树节点过滤
-    const filterNode = (value, data) => {
-      if (!value) return true
-      return data.label.includes(value)
-    }
-
-    // 树节点点击
-    const handleNodeClick = (data) => {
-      selectedNode.value = data
-      if (data.type === 'baseline') {
-        selectedBaseline.value = data
-        // 根据节点数据获取基线详情
-        fetchBaselineList()
-      }
-    }
-
     // 表格行点击
     const handleRowClick = (row) => {
       selectedBaseline.value = row
@@ -546,6 +539,12 @@ export default {
     const handleView = (row) => {
       currentBaseline.value = { ...row }
       viewDialogVisible.value = true
+    }
+
+    // 刷新基线列表
+    const handleRefresh = async () => {
+      await fetchBaselineList()
+      ElMessage.success('刷新成功')
     }
 
     // 新增基线
@@ -591,8 +590,8 @@ export default {
     const handleDelete = async (row) => {
       try {
         await ElMessageBox.confirm(
-          `确定要删除基线"${row.baselineName}"吗？`,
-          '删除确认',
+          `确定要归档基线"${row.baselineName}"吗？归档后该基线将不会被删除，可在版本历史中查看和恢复。`,
+          '归档确认',
           {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
@@ -601,11 +600,12 @@ export default {
         )
         
         await baselineApi.deleteBaseline(row.id)
-        ElMessage.success('删除成功')
+        ElMessage.success('归档成功')
         await fetchBaselineList()
-        buildTreeData()
       } catch (error) {
-        // 用户取消
+        if (error !== 'cancel') {
+          console.error('归档基线失败:', error)
+        }
       }
     }
 
@@ -627,7 +627,6 @@ export default {
         await baselineApi.setDefaultBaseline(selectedBaseline.value.id)
         ElMessage.success('设置成功')
         await fetchBaselineList()
-        buildTreeData()
       } catch (error) {
         // 用户取消
       }
@@ -635,7 +634,17 @@ export default {
 
     // 版本历史
     const handleVersionHistory = () => {
-      ElMessage.info('查看版本历史')
+      if (!selectedBaseline.value) {
+        ElMessage.warning('请先选择一个基线')
+        return
+      }
+      versionHistoryVisible.value = true
+    }
+
+    // 版本切换后的回调
+    const handleVersionSwitched = async () => {
+      await fetchBaselineList()
+      ElMessage.success('版本已切换,基线列表已刷新')
     }
 
     // 导入基线
@@ -682,13 +691,24 @@ export default {
           ElMessage.success('更新成功')
         } else {
           // 创建基线
+          // 如果未填写版本号，前端按后端规则生成一个（格式：V + yyyyMMddHHmmss），避免后端校验失败
+          if (!form.baselineVersion || String(form.baselineVersion).trim() === '') {
+            const pad = (n) => String(n).padStart(2, '0')
+            const d = new Date()
+            const yyyy = d.getFullYear()
+            const MM = pad(d.getMonth() + 1)
+            const dd = pad(d.getDate())
+            const hh = pad(d.getHours())
+            const mm = pad(d.getMinutes())
+            const ss = pad(d.getSeconds())
+            form.baselineVersion = `V${yyyy}${MM}${dd}${hh}${mm}${ss}`
+          }
           await baselineApi.createBaseline(form)
           ElMessage.success('创建成功')
         }
         
         editDialogVisible.value = false
         await fetchBaselineList()
-        buildTreeData()
       } catch (error) {
         console.error('基线操作失败:', error)
         if (error !== false) {
@@ -722,7 +742,6 @@ export default {
         serverTypeId: '',
         categoryId: '',
         baselineName: '',
-        baselineVersion: '',
         fileName: '',
         configContent: '',
         description: ''
@@ -740,15 +759,14 @@ export default {
       fetchBaselineList()
     }
 
-    // 监听搜索输入
-    watch(filterText, (val) => {
-      treeRef.value?.filter(val)
-    })
-
     onMounted(async () => {
       await fetchBasicData()
       await fetchBaselineList()
-      buildTreeData()
+    })
+
+    // 页面激活时刷新（当从其他页面切换回来时）
+    onActivated(async () => {
+      await fetchBaselineList()
     })
 
     return {
@@ -756,34 +774,34 @@ export default {
       submitLoading,
       viewDialogVisible,
       editDialogVisible,
+      versionHistoryVisible,
       isEdit,
       formRef,
-      treeRef,
       uploadRef,
-      filterText,
+      filterForm,
       pagination,
       systemList,
       serverTypeList,
       categoryList,
       baselineList,
-      selectedNode,
       selectedBaseline,
       currentBaseline,
-      treeData,
-      treeProps,
       form,
       rules,
       getStatusText,
-      filterNode,
-      handleNodeClick,
+      handleFilterChange,
+      handleSearch,
+      handleResetFilter,
       handleRowClick,
       handleView,
+      handleRefresh,
       handleAdd,
       handleEdit,
       handleCopy,
       handleDelete,
       handleSetDefault,
       handleVersionHistory,
+      handleVersionSwitched,
       handleImport,
       handleDownload,
       handleFileChange,
@@ -799,36 +817,14 @@ export default {
 
 <style lang="scss" scoped>
 .baseline-manage {
-  .tree-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-
-    h3 {
-      margin: 0;
-    }
-  }
-
-  .tree-node {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
+  .filter-section {
+    margin-bottom: 24px;
+    padding: 20px;
+    background: #f5f7fa;
+    border-radius: 8px;
     
-    .node-label {
-      flex: 1;
-    }
-    
-    .node-extra {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      
-      .node-version {
-        font-size: 12px;
-        color: #909399;
-      }
+    .filter-form {
+      margin-bottom: 0;
     }
   }
 

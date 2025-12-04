@@ -235,21 +235,29 @@ export default {
     const fetchSystemList = async () => {
       loading.value = true
       try {
+        console.log('[DEBUG] 系统信息页面开始获取系统列表...')
         const params = {
           current: pagination.current,
           size: pagination.size,
           ...searchForm
         }
         const response = await systemApi.getSystemList(params)
+        console.log('[DEBUG] 系统信息页面API响应:', response)
+        
         if (response.code === 200) {
-          systemList.value = response.data.records
-          pagination.total = response.data.total
+          systemList.value = response.data.records || []
+          pagination.total = response.data.total || 0
+          console.log('[DEBUG] 系统信息页面获取到的系统列表:', systemList.value)
         } else {
           ElMessage.error(response.message)
         }
+        
+        // 强制触发Vue响应式更新
+        await new Promise(resolve => setTimeout(resolve, 0))
       } catch (error) {
         ElMessage.error('获取系统列表失败')
         console.error(error)
+        systemList.value = []
       } finally {
         loading.value = false
       }
@@ -387,6 +395,7 @@ export default {
     }
 
     onMounted(() => {
+      console.log('[DEBUG] 系统信息页面组件挂载，开始加载数据...')
       fetchSystemList()
     })
 

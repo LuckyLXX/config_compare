@@ -15,6 +15,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * SSH命令采集处理器
@@ -52,6 +53,15 @@ public class CommandCollectHandler extends AbstractCollectHandler {
             session = jsch.getSession(server.getUsername(), server.getServerIp(), server.getSshPort());
             session.setPassword(server.getPassword());
             session.setConfig("StrictHostKeyChecking", "no");
+            
+            // 设置认证方式，优先使用密码认证，避免Kerberos认证问题
+            Properties config = new Properties();
+            config.put("PreferredAuthentications", "password,publickey");
+            config.put("PubkeyAuthentication", "no");
+            config.put("GSSAPIAuthentication", "no");
+            config.put("KerberosAuthentication", "no");
+            session.setConfig(config);
+            
             session.setTimeout(30000);
             session.connect();
             
@@ -155,6 +165,15 @@ public class CommandCollectHandler extends AbstractCollectHandler {
             session = jsch.getSession(server.getUsername(), server.getServerIp(), server.getSshPort());
             session.setPassword(server.getPassword());
             session.setConfig("StrictHostKeyChecking", "no");
+            
+            // 设置认证方式，优先使用密码认证，避免Kerberos认证问题
+            Properties config = new Properties();
+            config.put("PreferredAuthentications", "password,publickey");
+            config.put("PubkeyAuthentication", "no");
+            config.put("GSSAPIAuthentication", "no");
+            config.put("KerberosAuthentication", "no");
+            session.setConfig(config);
+            
             session.setTimeout(context.getTimeoutSeconds() * 1000);
             session.connect();
             
@@ -176,7 +195,16 @@ public class CommandCollectHandler extends AbstractCollectHandler {
             BufferedReader errorReader = new BufferedReader(new InputStreamReader(errorStream));
             
             String line;
+            boolean firstLine = true;
             while ((line = reader.readLine()) != null) {
+                // 处理BOM字符（UTF-8 BOM为 \uFEFF）
+                if (firstLine && line.length() > 0) {
+                    if (line.charAt(0) == '\uFEFF') {
+                        line = line.substring(1);
+                        log.info("检测到并移除了UTF-8 BOM字符，命令: {}", command);
+                    }
+                    firstLine = false;
+                }
                 output.append(line).append("\n");
             }
             
@@ -192,7 +220,12 @@ public class CommandCollectHandler extends AbstractCollectHandler {
             int exitCode = channel.getExitStatus();
             
             if (exitCode == 0) {
-                return CollectResult.success(output.toString());
+                // 移除最后多余的换行符
+                String result = output.toString();
+                if (result.endsWith("\n") && result.length() > 0) {
+                    result = result.substring(0, result.length() - 1);
+                }
+                return CollectResult.success(result);
             } else {
                 String error = errorOutput.length() > 0 ? errorOutput.toString() : "命令执行失败，退出码：" + exitCode;
                 return CollectResult.fail(error);

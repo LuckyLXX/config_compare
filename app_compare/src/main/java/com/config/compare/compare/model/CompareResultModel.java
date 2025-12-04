@@ -58,6 +58,11 @@ public class CompareResultModel {
     private List<DiffItem> diffItems;
 
     /**
+     * 完整的对齐行信息（用于前端显示）
+     */
+    private List<AlignedLine> alignedLines;
+
+    /**
      * 差异摘要
      */
     private String diffSummary;
@@ -145,18 +150,30 @@ public class CompareResultModel {
             return;
         }
         
-        // 根据差异级别计算权重分数
-        double highWeight = 10.0; // 高级别差异权重
-        double mediumWeight = 5.0; // 中级别差异权重
-        double lowWeight = 1.0;   // 低级别差异权重
+        // 如果没有差异，100%一致
+        if (diffCount == 0) {
+            this.consistencyScore = BigDecimal.valueOf(100);
+            this.consistent = true;
+            return;
+        }
         
-        double totalWeight = highDiffCount * highWeight + mediumDiffCount * mediumWeight + lowDiffCount * lowWeight;
-        double maxWeight = totalItems * highWeight;
+        // 有差异时，根据差异数量和级别计算评分
+        // 使用差异占比计算，确保有差异时不会是100%
+        double highWeight = 3.0;   // 高级别差异权重
+        double mediumWeight = 2.0; // 中级别差异权重
+        double lowWeight = 1.0;    // 低级别差异权重
         
-        double score = Math.max(0, (maxWeight - totalWeight) / maxWeight * 100);
+        double weightedDiffCount = highDiffCount * highWeight + mediumDiffCount * mediumWeight + lowDiffCount * lowWeight;
+        
+        // 使用对数衰减，让差异影响更明显
+        double diffRatio = weightedDiffCount / totalItems;
+        double score = Math.max(0, (1 - diffRatio) * 100);
+        
+        // 确保有差异时最高99.99%
+        score = Math.min(score, 99.99);
+        
         this.consistencyScore = BigDecimal.valueOf(score).setScale(2, BigDecimal.ROUND_HALF_UP);
-        
-        this.consistent = this.consistencyScore.compareTo(BigDecimal.valueOf(100)) == 0;
+        this.consistent = false;
     }
 
     /**

@@ -97,65 +97,6 @@ export const executionReportApi = {
 }
 
 
-// 系统健康报告相关API
-export const systemHealthApi = {
-  // 获取系统健康报告
-  getSystemHealthReports(params) {
-    return request({
-      url: '/report/system-health',
-      method: 'get',
-      params
-    })
-  },
-
-  // 获取系统健康指标
-  getSystemHealthMetrics(params) {
-    return request({
-      url: '/report/system-health/metrics',
-      method: 'get',
-      params
-    })
-  },
-
-  // 获取性能指标
-  getPerformanceMetrics(params) {
-    return request({
-      url: '/report/system-health/performance',
-      method: 'get',
-      params
-    })
-  }
-}
-
-// 统计报告相关API
-export const statisticsApi = {
-  // 获取采集统计
-  getCollectStatistics(params) {
-    return request({
-      url: '/report/statistics/collect',
-      method: 'get',
-      params
-    })
-  },
-
-  // 获取比对统计
-  getCompareStatistics(params) {
-    return request({
-      url: '/report/statistics/compare',
-      method: 'get',
-      params
-    })
-  },
-
-  // 获取系统使用统计
-  getUsageStatistics(params) {
-    return request({
-      url: '/report/statistics/usage',
-      method: 'get',
-      params
-    })
-  }
-}
 
 // 比对报告相关API
 export const compareReportApi = {
@@ -182,7 +123,5 @@ export const compareReportApi = {
 export default {
   reportDashboardApi,
   executionReportApi,
-  systemHealthApi,
-  statisticsApi,
   compareReportApi
 }

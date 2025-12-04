@@ -914,7 +914,7 @@ export default {
       
       validatingCron.value = true
       try {
-        const response = await fetch('/api/schedule/validate-cron', {
+        const response = await fetch('/api/utils/validate-cron', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -934,7 +934,7 @@ export default {
           // 如果有效，获取下次执行时间
           if (result.data) {
             try {
-              const nextResponse = await fetch('/api/schedule/next-execution', {
+              const nextResponse = await fetch('/api/utils/next-execution', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json'

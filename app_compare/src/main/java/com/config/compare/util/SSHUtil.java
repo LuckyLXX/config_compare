@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Properties;
 
 /**
  * SSH连接工具类
@@ -32,6 +33,14 @@ public class SSHUtil {
             // 跳过主机密钥检查
             session.setConfig("StrictHostKeyChecking", "no");
             
+            // 设置认证方式，优先使用密码认证，避免Kerberos认证问题
+            Properties config = new Properties();
+            config.put("PreferredAuthentications", "password,publickey");
+            config.put("PubkeyAuthentication", "no");
+            config.put("GSSAPIAuthentication", "no");
+            config.put("KerberosAuthentication", "no");
+            session.setConfig(config);
+
             // 设置超时
             int timeout = timeoutSeconds != null ? timeoutSeconds * 1000 : DEFAULT_TIMEOUT;
             session.setTimeout(timeout);

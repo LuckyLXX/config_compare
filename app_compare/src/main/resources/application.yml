@@ -16,10 +16,6 @@ spring:
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
-      driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://117.72.150.127:3306/config_compare?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      username: root
-      password: Qq@857251389
       # 连接池配置
       initial-size: 5
       min-idle: 5
@@ -42,6 +38,20 @@ spring:
         enabled: true
         url-pattern: /*
         exclusions: "*.js,*.gif,*.jpg,*.bmp,*.png,*.css,*.ico,/druid/*"
+
+# 数据库类型配置
+database:
+  type: mysql  # mysql/oracle
+  mysql:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://117.72.150.127:3306/config_compare?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: Qq@857251389
+  oracle:
+    driver-class-name: oracle.jdbc.OracleDriver
+    url: jdbc:oracle:thin:@//localhost:1521/ORCL
+    username: config_compare
+    password: config_compare_2024
 
   # Jackson配置
   jackson:
@@ -86,8 +96,11 @@ mybatis-plus:
     call-setters-on-nulls: true
     jdbc-type-for-null: 'null'
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 根据数据库类型选择方言
+    database-id: ${database.type}
   global-config:
     db-config:
+      # 根据数据库类型选择ID生成策略
       id-type: AUTO
       logic-delete-field: deleted
       logic-delete-value: 1
@@ -146,3 +159,23 @@ config:
     security:
       password-key: "config-compare-2024"
       token-expire-hours: 24
+
+# 数据处理配置
+app:
+  data-process:
+    # 临时文件存储目录（与logs目录同级）
+    temp-dir: ./data-process-temp
+    # 临时文件过期时间（分钟）
+    temp-expire-minutes: 60
+  
+  # AI服务配置（可选，不配置则使用模拟结果）
+  ai:
+    deepseek:
+      url: https://api.deepseek.com/v1/chat/completions
+      api-key: sk-740cc1a61f5a4b39aa0b98e90811227a
+    gpt4:
+      url: https://api.openai.com/v1/chat/completions
+      api-key: ${AI_GPT4_KEY:}
+    claude:
+      url: https://api.anthropic.com/v1/messages
+      api-key: ${AI_CLAUDE_KEY:}
