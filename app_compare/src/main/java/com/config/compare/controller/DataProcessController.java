@@ -11,11 +11,19 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 数据处理Controller
@@ -56,6 +64,114 @@ public class DataProcessController {
             return Result.error("转换失败: " + e.getMessage());
         }
     }
+
+     @Operation(summary = "AI智能处理（流式）", description = "使用SSE流式返回AI处理结果")
+     @PostMapping(value = "/ai/process/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+     public SseEmitter aiProcessStream(@Valid @RequestBody AiProcessRequest request, HttpServletResponse response) {
+         // 避免内网 Nginx/网关缓冲 SSE，导致长时间无输出触发 504
+         if (response != null) {
+             response.setHeader("Cache-Control", "no-cache");
+             response.setHeader("X-Accel-Buffering", "no");
+         }
+
+         SseEmitter emitter = new SseEmitter(0L);
+
+         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+             Thread t = new Thread(r, "ai-sse-heartbeat");
+             t.setDaemon(true);
+             return t;
+         });
+
+         AtomicBoolean cleaned = new AtomicBoolean(false);
+         final ScheduledFuture<?>[] heartbeatHolder = new ScheduledFuture<?>[1];
+         Runnable cleanup = () -> {
+             if (!cleaned.compareAndSet(false, true)) return;
+             try {
+                 if (heartbeatHolder[0] != null) {
+                     heartbeatHolder[0].cancel(true);
+                 }
+             } catch (Exception ignored) {
+             }
+             try {
+                 scheduler.shutdownNow();
+             } catch (Exception ignored) {
+             }
+         };
+
+         emitter.onCompletion(() -> {
+             cleanup.run();
+             log.info("AI流式处理完成，模型: {}", request.getModel());
+         });
+         emitter.onTimeout(() -> {
+             cleanup.run();
+             log.warn("AI流式处理超时，模型: {}", request.getModel());
+         });
+         emitter.onError(throwable -> {
+             cleanup.run();
+             log.error("AI流式处理出错，模型: {}", request.getModel(), throwable);
+         });
+
+         // 先发一个 start，确保连接尽快建立并有输出；同时开启心跳避免“空闲超时”
+         try {
+             emitter.send(SseEmitter.event().name("start").data("ok"));
+         } catch (Exception ignored) {
+         }
+         heartbeatHolder[0] = scheduler.scheduleAtFixedRate(() -> {
+             try {
+                 // 前端会忽略 ping 事件，但可以让网关看到持续输出，避免 504
+                 emitter.send(SseEmitter.event().name("ping").data("ping"));
+             } catch (Exception ignored) {
+             }
+         }, 10, 10, TimeUnit.SECONDS);
+
+         CompletableFuture.runAsync(() -> {
+             try {
+                 DataProcessResponse aiResp = dataProcessService.aiProcess(request);
+                 if (aiResp == null || Boolean.FALSE.equals(aiResp.getSuccess())) {
+                     String msg = aiResp != null ? aiResp.getErrorMessage() : "AI处理失败";
+                     emitter.send(SseEmitter.event().name("error").data(msg));
+                     emitter.complete();
+                     return;
+                 }
+
+                 String content = aiResp.getContent() != null ? aiResp.getContent() : "";
+                 String[] lines = content.split("\\r?\\n", -1);
+                 int batchChars = 0;
+                 SseEmitter.SseEventBuilder builder = SseEmitter.event().name("delta");
+
+                 for (int i = 0; i < lines.length; i++) {
+                     String line = lines[i];
+                     builder.data(line);
+                     batchChars += line.length();
+
+                     boolean shouldFlush = batchChars >= 1500;
+                     boolean isLast = i == lines.length - 1;
+
+                     if (shouldFlush || isLast) {
+                         if (!isLast) {
+                             builder.data("");
+                         }
+                         emitter.send(builder);
+                         builder = SseEmitter.event().name("delta");
+                         batchChars = 0;
+                     }
+                 }
+
+                 emitter.send(SseEmitter.event().name("end").data("done"));
+                 emitter.complete();
+             } catch (Exception e) {
+                 try {
+                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                 } catch (Exception ignored) {
+                 }
+                 emitter.complete();
+             } finally {
+                 cleanup.run();
+             }
+         });
+
+         return emitter;
+     }
 
     /**
      * AI智能处理

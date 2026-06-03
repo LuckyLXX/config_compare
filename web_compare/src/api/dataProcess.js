@@ -43,6 +43,105 @@ export const dataProcessApi = {
     })
   },
 
+  aiProcessStream(data, handlers = {}, options = {}) {
+    const { onDelta, onEnd, onError } = handlers
+    const { signal } = options
+
+    return fetch('/api/data-process/ai/process/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data),
+      signal
+    }).then(async (resp) => {
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        throw new Error(text || `HTTP ${resp.status}`)
+      }
+
+      if (!resp.body) {
+        throw new Error('当前浏览器不支持流式读取')
+      }
+
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+
+      let eventName = 'message'
+      let dataLines = []
+
+      const dispatch = () => {
+        const dataText = dataLines.join('\n')
+        if (eventName === 'delta') {
+          onDelta && onDelta(dataText)
+        } else if (eventName === 'end') {
+          onEnd && onEnd(dataText)
+        } else if (eventName === 'error') {
+          onError && onError(dataText)
+        }
+        eventName = 'message'
+        dataLines = []
+      }
+
+      const feedLine = (line) => {
+        // SSE 标准：空行表示一个事件结束
+        if (line === '') {
+          if (dataLines.length > 0 || eventName !== 'message') {
+            dispatch()
+          }
+          return
+        }
+
+        // 注释行
+        if (line.startsWith(':')) return
+
+        if (line.startsWith('event:')) {
+          eventName = line.slice('event:'.length).trim()
+          return
+        }
+
+        if (line.startsWith('data:')) {
+          // SSE 规范：data: 后可能有一个可选空格
+          let v = line.slice('data:'.length)
+          if (v.startsWith(' ')) v = v.slice(1)
+          dataLines.push(v)
+          return
+        }
+
+        // 兼容非标准实现：data: 后面的续行没有 data: 前缀
+        if (dataLines.length > 0) {
+          dataLines.push(line)
+        }
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        let idx
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+          let line = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 1)
+          if (line.endsWith('\r')) line = line.slice(0, -1)
+          feedLine(line)
+        }
+      }
+
+      // 处理尾部残留
+      if (buffer.length > 0) {
+        let line = buffer
+        if (line.endsWith('\r')) line = line.slice(0, -1)
+        feedLine(line)
+      }
+      // 如果没有以空行结尾，仍然尝试派发一次
+      if (dataLines.length > 0 || eventName !== 'message') {
+        dispatch()
+      }
+    })
+  },
+
   /**
    * 数据清洗
    * @param {Object} data - 请求数据

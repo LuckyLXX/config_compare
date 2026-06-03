@@ -225,7 +225,7 @@
                     </div>
                   </div>
                   <div class="card-body">
-                    {{ processResult.content }}
+                    <div class="markdown-body" v-html="aiRenderedHtml"></div>
                   </div>
                 </div>
               </div>
@@ -325,10 +325,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { dataProcessApi } from '@/api/dataProcess'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 // 定义组件名，确保 keep-alive 正常工作
 defineOptions({
@@ -357,6 +359,7 @@ const excelConfig = reactive({
 const aiConfig = reactive({
   model: 'deepseek',
   prompt: '',
+  stream: true,
   // 模型列表（从localStorage加载或使用默认值）
   models: JSON.parse(localStorage.getItem('ai_models') || 'null') || [
     { id: 'deepseek', name: 'DeepSeek-V2', modelId: 'deepseek-chat', url: 'https://api.deepseek.com/v1/chat/completions', apiKey: '', tag: '默认' }
@@ -399,6 +402,42 @@ const processResult = reactive({
   fileName: '',
   model: '',
   appliedRules: ''
+})
+
+marked.setOptions({
+  breaks: true
+})
+
+const stripOuterMarkdownFence = (text) => {
+  if (!text) return ''
+  // 完整闭合的围栏：```markdown ... ```
+  let m = text.match(/^```(?:markdown|md)?\s*\r?\n([\s\S]*?)\r?\n```\s*$/i)
+  if (m) return m[1]
+  // 流式过程中可能未闭合：只要开头是 ```markdown 就先去掉第一行
+  if (/^```(?:markdown|md)?\s*\r?\n/i.test(text)) {
+    return text.replace(/^```(?:markdown|md)?\s*\r?\n/i, '').replace(/\r?\n```\s*$/i, '')
+  }
+  // 兼容无语言标识的 ```
+  m = text.match(/^```\s*\r?\n([\s\S]*?)\r?\n```\s*$/)
+  if (m) return m[1]
+  if (/^```\s*\r?\n/.test(text)) {
+    return text.replace(/^```\s*\r?\n/, '').replace(/\r?\n```\s*$/, '')
+  }
+  return text
+}
+
+const aiRenderedHtml = computed(() => {
+  const md = stripOuterMarkdownFence(processResult.content || '')
+  return DOMPurify.sanitize(marked.parse(md))
+})
+
+let aiAbortController = null
+
+onBeforeUnmount(() => {
+  if (aiAbortController) {
+    aiAbortController.abort()
+    aiAbortController = null
+  }
 })
 
 // 加载数据状态
@@ -743,18 +782,52 @@ const handleAiProcess = async () => {
   try {
     // 获取当前选中的模型配置
     const currentModel = getCurrentModel()
-    const res = await dataProcessApi.aiProcess({
+    const payload = {
       sourceData: sourceContent.value,
       model: aiConfig.model,
       prompt: aiConfig.prompt,
       taskId: taskId.value ? Number(taskId.value) : undefined,
       executeId: executeId.value || undefined,
-      // 传递自定义模型配置
       customUrl: currentModel?.url || undefined,
       customApiKey: currentModel?.apiKey || undefined,
       customModelId: currentModel?.modelId || undefined,
       timeout: currentModel?.timeout || 60
-    })
+    }
+
+    processResult.type = 'ai'
+    processResult.content = ''
+    processResult.model = aiConfig.model
+
+    if (aiAbortController) {
+      aiAbortController.abort()
+    }
+    aiAbortController = new AbortController()
+
+    if (aiConfig.stream) {
+      await dataProcessApi.aiProcessStream(
+        payload,
+        {
+          onDelta: (text) => {
+            processResult.content += text
+          },
+          onEnd: () => {},
+          onError: (msg) => {
+            throw new Error(msg || 'AI流式处理失败')
+          }
+        },
+        {
+          signal: aiAbortController.signal
+        }
+      )
+
+      aiAbortController = null
+
+      processedData.value = true
+      ElMessage.success('AI 处理完成')
+      return
+    }
+
+    const res = await dataProcessApi.aiProcess(payload)
     if (res.code === 200 && res.data) {
       processResult.type = 'ai'
       processResult.content = res.data.content
@@ -765,7 +838,38 @@ const handleAiProcess = async () => {
       ElMessage.error(res.message || 'AI处理失败')
     }
   } catch (e) {
-    ElMessage.error('AI处理失败：' + (e.message || '未知错误'))
+    if (e && (e.name === 'AbortError' || e.message === 'The user aborted a request.')) {
+      return
+    }
+    if (aiConfig.stream) {
+      try {
+        const currentModel = getCurrentModel()
+        const res = await dataProcessApi.aiProcess({
+          sourceData: sourceContent.value,
+          model: aiConfig.model,
+          prompt: aiConfig.prompt,
+          taskId: taskId.value ? Number(taskId.value) : undefined,
+          executeId: executeId.value || undefined,
+          customUrl: currentModel?.url || undefined,
+          customApiKey: currentModel?.apiKey || undefined,
+          customModelId: currentModel?.modelId || undefined,
+          timeout: currentModel?.timeout || 60
+        })
+        if (res.code === 200 && res.data) {
+          processResult.type = 'ai'
+          processResult.content = res.data.content
+          processResult.model = res.data.model
+          processedData.value = true
+          ElMessage.success('AI 处理完成（已降级为非流式）')
+        } else {
+          ElMessage.error(res.message || 'AI处理失败')
+        }
+      } catch (err) {
+        ElMessage.error('AI处理失败：' + (err.message || e.message || '未知错误'))
+      }
+    } else {
+      ElMessage.error('AI处理失败：' + (e.message || '未知错误'))
+    }
   } finally {
     processing.value = false
   }
@@ -1074,7 +1178,35 @@ const handleDownloadResult = () => {
   font-size: 14px;
   line-height: 1.6;
   color: #303133;
-  white-space: pre-wrap;
+  white-space: normal;
+}
+
+.markdown-body {
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.markdown-body :deep(pre) {
+  background: #0b1020;
+  color: #e6edf3;
+  padding: 12px;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.markdown-body :deep(code) {
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+}
+
+.markdown-body :deep(table) {
+  border-collapse: collapse;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  border: 1px solid #ebeef5;
+  padding: 6px 10px;
 }
 
 .code-editor-light :deep(.el-textarea__inner) {
